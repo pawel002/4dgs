@@ -1,0 +1,58 @@
+\chapter{Introduction}
+
+\section{Research Context}
+
+The precise three-dimensional reconstruction of indoor environments is a massive challenge in computer vision, with a long history that spans classical photogrammetry, geometric multi-view stereo, implicit neural fields, and the most recent generation of explicit radiance-field representations. The central question has remained unchanged over that time. Given a finite number of two-dimensional observations of a scene, can we recover a three-dimensional description accurate enough, so re-rendering the scene from viewpoints that were never actually captured is possible? This thesis focuses on \textbf{reconstructing indoor environments that contain motion}, using only multi-view RGB video, and producing a representation that can be rendered in real time. The motivating application is broader than computer graphics. There is a growing interest among experimental psychologists and behavioural researchers in digital twins of indoor spaces as testing environments for cognitive experiments. A digital twin of a room that preserves not only its static geometry and appearance but also the movement of its subjects opens the door to reproducible behavioural paradigms where a participant's movements and decision-making can be studied against a 4D environment. For such use cases the accuracy of the reconstruction is not a matter of aesthetics, it is a prerequisite for the validity of the experiment. The technical backbone of the proposed pipeline is \emph{3D Gaussian Splatting (3DGS)} \cite{kerbl2023}, an explicit, point-based, differentiable radiance-field representation that has established itself as the dominant alternative to Neural Radiance Fields since 2023. Static 3DGS is a solved problem in the sense that the reference implementation converges reliably and renders at over 100\,FPS on consumer GPUs. The situation in the temporal domain is far less settled, a handful of extensions exist, but they disagree on the most basic design choices, and none is obviously well-suited to the characteristic properties of indoor video captures, namely mostly rigid background geometry, comparatively sparse moving content (one or two human actors), static cameras, and capture durations in the tens of seconds rather than a few frames.
+
+This thesis proposes and evaluates a extension of 3DGS to dynamic indoor scenes based on the explicit recognition that indoor videos naturally decompose into a \emph{static} component and a \emph{dynamic} component. The key insight is that this decomposition does not need to be computed explicitly through semantic segmentation, it can emerge from the optimisation itself, provided that the Gaussian topology is fixed after the first frame and that only the some geometric parameters (position, scale, rotation, opacity) are allowed to evolve in time. The rest of the thesis develops this idea into a complete pipeline, evaluates it on a controlled synthetic benchmark as well as real-world experimental environment, and contrasts it with the most closely related prior work.
+
+\section{Problem Statement: The Temporal Challenge in Neural Rendering}
+
+While static 3DGS produces good reconstructions of stationary indoor geometry, extending the method to a temporal sequence raises four related difficulties.
+
+\begin{itemize}
+    \item \textbf{Computational cost of per-frame reconstruction.} The most straightforward temporal extension of 3DGS is to treat each video frame as an independent scene and run the full static optimisation pipeline for every frame. With $T$ frames and the default $30\,000$ iterations per frame, a one-minute capture at $30$\,fps would require $5.4 \times 10^{7}$ optimiser steps. This would be highly inefficient on a single GPU, since the vast majority of the scene (the static background) is re-learned from scratch at every time step.
+
+    \item \textbf{Loss of inter-frame correspondence.} A second naive approach is to re-initialise each frame from the previously trained one. This halves the training time, but under free optimisation (with densification, pruning, and colour updates enabled) there is no guarantee that the same physical feature continues to be represented by the same Gaussian across time. Any application that requires a trajectory (tracking a hand, re-timing a motion, extracting a dynamic object) immediately fails.
+
+    \item \textbf{Degeneracies of fully free temporal optimisation.} When a per-frame 3DGS optimiser is given complete freedom, it can explain motion in two different ways: by \emph{moving} splats (geometrically correct) or by \emph{repainting} splats (geometrically wrong but photometrically cheap). In practice the loss landscape frequently funnels the optimiser toward the latter, producing reconstructions where moving subjects appear as smeared paintings on the static background rather than as objects with coherent 3D shape. This degeneracy, referred to in the thesis as \emph{colour-hallucinated motion}, is a direct consequence of allowing the spherical-harmonic coefficients to change in time.
+
+    \item \textbf{Storage and memory growth.} Finally, a per-frame representation must be serialised somewhere. Unconstrained approaches produce one independent Gaussian field per frame, which grows memory linearly with $T$ \emph{and} with the splat count, since the splat count can itself grow from frame to frame under densification. At video lengths relevant to behavioural experiments (tens of seconds, thousands of frames) this becomes untenable.
+    
+\end{itemize}
+
+Existing four-dimensional extensions of 3DGS (see Section~2.4) address these issues with varying degrees of success but converge on the same family of solutions: encode each Gaussian's time-dependence with an auxiliary neural network \cite{yang2024deformable}, a high-dimensional basis \cite{wu20244dgs}, or a per-Gaussian polynomial \cite{li2024spacetime}. All of these inject \emph{additional} machinery, with its own training dynamics and its own failure modes. The thesis asks whether a simpler, almost machinery-free solution is sufficient for the specific regime of indoor captures with static cameras.
+
+\section{Research Objectives and Questions}
+
+The primary objective of this thesis is to design, implement, and evaluate a dynamic extension of 3D Gaussian Splatting suitable for indoor multi-view video, and to understand the specific role played by each design choice. The work is organized around three research questions:
+
+\begin{itemize}
+    \item \textbf{Q1: System Structure.} Can a dynamic indoor scene be accurately reconstructed by establishing a fixed baseline on the first frame and directly tracking movement thereafter, without relying on complex neural networks?
+
+    \item \textbf{Q2: Physical Accuracy.} Does locking the color and lighting variables (spherical harmonics) during the tracking phase force the system to capture true physical movement, rather than "faking" motion by merely shifting colors?
+
+    \item \textbf{Q3: Computational Efficiency.} How much does predicting movement based on the previous frame's speed (linear velocity) reduce the processing time and computational effort needed for each new frame?
+
+\end{itemize}
+
+A secondary, methodological objective is to build the full evaluation infrastructure needed to answer these questions with confidence: a controllable synthetic dataset with pixel-perfect ground truth, a COLMAP-based initialisation pipeline, an interactive C++ point-cloud and gaussian renderer, and a unified per-frame PLY output format that can be stored and renderer by slightly modified 3DGS rendering tools.
+
+\section{Scope and Limitations}
+
+To keep the study focused and the conclusions meaningful, its scope is bounded by several deliberate design choices and restrictions. Primarily, the research exclusively uses temporally synchronized multi-view RGB video from fixed cameras. By intentionally omitting depth sensors such as LiDAR or RGB-D, the study stress-tests a purely vision-based pipeline and ensures that the contributions remain compatible with low-cost, camera-only capture rigs. Because the entire dynamic optimization relies on a single initial calibration computed on the first frame, the method relies on the cameras remaining entirely static.
+
+Furthermore, the system is designed strictly for indoor scenes under controlled lighting, explicitly excluding outdoor illumination, strong shadows, and weather variations. Within these controlled spaces, the dynamic content is expected to consist of one or a few moving actors or displaced rigid objects. Complex volumetric or semi-transparent phenomena, such as fluid simulations, smoke, fire, or water are not modeled, as they violate the method's assumption that a surface maintains a stable reflectance over time.
+
+Finally, the study's evaluation and processing regimes are tightly constrained. Primary evaluation is conducted within a fully synthetic environment rendered in Blender, which provides analytical ground truth for both camera calibration and geometry (but the real-world evaluation will also be performed). This approach isolates the method's performance from the noise present in real-world photogrammetric calibration. The entire pipeline runs offline. Although the final output achieves real-time rendering frame rates, the training process and the per-frame tracking stage (which relies on a short optimization loop rather than a closed-form update) are computationally heavy and are not designed for real-time execution.
+
+\section{Thesis Structure}
+
+\noindent
+The thesis is organised into four chapters.
+
+\paragraph{Chapter 2: Literature Review and Theoretical Foundations.} This chapter goes over the evolution of 3D reconstruction from the geometric era (8-point algorithm, factorisation, COLMAP) through the implicit-neural era (NeRF, Instant-NGP) to the current radiance fields era (3D Gaussian Splatting). A dedicated section covers the emerging literature on dynamic and four-dimensional neural rendering (D-NeRF, Deformable 3DGS, 4D-GS, SpaceTime Gaussians, Dynamic 3D Gaussians), which provides the direct comparison baseline for the proposed method. The chapter closes with the formal mathematical background for the two algorithms that this thesis builds on: COLMAP's incremental Structure-from-Motion pipeline and the differentiable rasterisation for 3DGS.
+
+\paragraph{Chapter 3: Research.} It will present the full end-to-end pipeline. It begins with the construction of the synthetic evaluation environment in Blender (including the parametric camera trajectory and the exact intrinsics derivation), continues with the COLMAP-based sparse reconstruction and then develops the two core algorithmic contributions in sequence: a reference static 3DGS reconstruction, and the proposed dynamic extension. The chapter concludes with benchmarks quantifying the effect of each design choice.
+
+\paragraph{Chapter 4: Conclusions.} Summarises the findings, discusses the limitations encountered during implementation and evaluation, and outlines ideas for future work.

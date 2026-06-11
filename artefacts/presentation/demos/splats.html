@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>From points to splats</title>
+<link rel="stylesheet" href="demo.css" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "../vendor/three/three.module.js",
+    "three/addons/": "../vendor/three/addons/"
+  }
+}
+</script>
+</head>
+<body>
+<div class="tag">Same primitive set — rendered as <b>hard points</b> vs <b>soft Gaussians</b></div>
+<div class="hint">drag to orbit &middot; scroll to zoom</div>
+<div class="hud">
+  <label><input type="checkbox" id="splatMode" checked /> Gaussian splats</label>
+  <label>size <input type="range" id="size" min="0.2" max="3.2" step="0.05" value="1.45" /></label>
+  <label>opacity <input type="range" id="opacity" min="0.1" max="1" step="0.02" value="0.85" /></label>
+  <div class="spacer"></div>
+  <div>primitives: <span class="stat" id="count">–</span></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { buildRoomPoints, mulberry32 } from './room.js';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d1117);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.05, 100);
+camera.position.set(4.6, 3.4, 5.6);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1.0, 0);
+controls.enableDamping = true;
+controls.maxDistance = 18;
+
+const room = buildRoomPoints(420);
+document.getElementById('count').textContent = room.count.toLocaleString('en-US');
+
+// Per-point random scale so splats are not uniformly sized
+const rnd = mulberry32(7);
+const scales = new Float32Array(room.count);
+for (let i = 0; i < room.count; i++) scales[i] = 0.65 + rnd() * 1.1;
+
+const geo = new THREE.BufferGeometry();
+geo.setAttribute('position', new THREE.BufferAttribute(room.positions, 3));
+geo.setAttribute('color', new THREE.BufferAttribute(room.colors, 3));
+geo.setAttribute('aScale', new THREE.BufferAttribute(scales, 1));
+const index = new Uint32Array(room.count);
+for (let i = 0; i < room.count; i++) index[i] = i;
+geo.setIndex(new THREE.BufferAttribute(index, 1));
+
+const uniforms = {
+  uSize: { value: 1.45 },
+  uOpacity: { value: 0.85 },
+  uSplat: { value: 1.0 },
+  uViewportH: { value: innerHeight },
+};
+
+const material = new THREE.ShaderMaterial({
+  uniforms,
+  transparent: true,
+  depthTest: true,
+  depthWrite: false,
+  vertexShader: /* glsl */`
+    attribute float aScale;
+    varying vec3 vColor;
+    uniform float uSize;
+    uniform float uSplat;
+    uniform float uViewportH;
+    void main() {
+      vColor = color;
+      vec4 mv = modelViewMatrix * vec4(position, 1.0);
+      float base = mix(0.35, 1.0, uSplat); // raw points draw smaller
+      gl_PointSize = clamp(uSize * aScale * base * (uViewportH * 0.016) * (10.0 / -mv.z), 1.0, 64.0);
+      gl_Position = projectionMatrix * mv;
+    }`,
+  fragmentShader: /* glsl */`
+    varying vec3 vColor;
+    uniform float uOpacity;
+    uniform float uSplat;
+    void main() {
+      vec2 c = gl_PointCoord - 0.5;
+      float r2 = dot(c, c) * 4.0;          // 1.0 at the sprite edge
+      if (r2 > 1.0) discard;
+      float gauss = exp(-4.0 * r2);        // Gaussian falloff
+      float hard = step(r2, 0.45);         // disc for raw-point mode
+      float a = mix(hard, gauss * uOpacity, uSplat);
+      if (a < 0.012) discard;
+      gl_FragColor = vec4(vColor, a);
+    }`,
+  vertexColors: true,
+});
+
+const points = new THREE.Points(geo, material);
+scene.add(points);
+
+// --- Back-to-front sorting (what the tile rasterizer does on the GPU) ---
+const dist = new Float32Array(room.count);
+const order = new Uint32Array(room.count);
+let lastSort = 0;
+const lastCam = new THREE.Vector3(Infinity, Infinity, Infinity);
+
+function sortSplats() {
+  const p = room.positions;
+  const cx = camera.position.x, cy = camera.position.y, cz = camera.position.z;
+  for (let i = 0; i < room.count; i++) {
+    const dx = p[3 * i] - cx, dy = p[3 * i + 1] - cy, dz = p[3 * i + 2] - cz;
+    dist[i] = dx * dx + dy * dy + dz * dz;
+    order[i] = i;
+  }
+  order.sort((a, b) => dist[b] - dist[a]);
+  geo.index.array.set(order);
+  geo.index.needsUpdate = true;
+}
+sortSplats();
+
+// --- UI ---
+const sizeEl = document.getElementById('size');
+const opEl = document.getElementById('opacity');
+const modeEl = document.getElementById('splatMode');
+sizeEl.oninput = () => (uniforms.uSize.value = parseFloat(sizeEl.value));
+opEl.oninput = () => (uniforms.uOpacity.value = parseFloat(opEl.value));
+modeEl.onchange = () => (uniforms.uSplat.value = modeEl.checked ? 1.0 : 0.0);
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  uniforms.uViewportH.value = innerHeight;
+});
+
+renderer.setAnimationLoop((time) => {
+  controls.update();
+  if (time - lastSort > 180 && camera.position.distanceToSquared(lastCam) > 1e-4) {
+    sortSplats();
+    lastCam.copy(camera.position);
+    lastSort = time;
+  }
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>

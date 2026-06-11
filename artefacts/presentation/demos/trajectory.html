@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Parametric capture trajectory</title>
+<link rel="stylesheet" href="demo.css" />
+<style>
+  .eq {
+    position: absolute; top: 12px; left: 14px;
+    color: #e2e8f0; font-size: 14px; line-height: 1.7;
+    background: rgba(10, 13, 18, 0.7); padding: 10px 16px; border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.08);
+    font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    pointer-events: none;
+  }
+  .eq i { color: #2dd4bf; font-style: normal; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "../vendor/three/three.module.js",
+    "three/addons/": "../vendor/three/addons/"
+  }
+}
+</script>
+</head>
+<body>
+<div class="eq">
+  x(t) = r<sub>x</sub> · sin(2π·t/T)<br/>
+  y(t) = r<sub>y</sub> · cos(2π·t/T)<br/>
+  z(t) = r<sub>z</sub> · sin(<i>ω</i>t) &nbsp;← height oscillation
+</div>
+<div class="hint">drag to orbit &middot; scroll to zoom</div>
+<div class="hud">
+  <button id="play">⏸ pause</button>
+  <label>ω (oscillation) <input type="range" id="omega" min="0" max="20" step="1" value="9" /></label>
+  <label>speed <input type="range" id="speed" min="0.2" max="3" step="0.1" value="1" /></label>
+  <div class="spacer"></div>
+  <div>frame: <span class="stat" id="frame">0</span> / 600</div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { trajectoryPoint } from './room.js';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d1117);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.05, 100);
+camera.position.set(6.4, 4.8, 7.2);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1.1, 0);
+controls.enableDamping = true;
+
+// --- Room as wireframe (the Blender modelling stage) ---
+const wire = new THREE.LineBasicMaterial({ color: 0x3b4a5e });
+function edgeBox(w, h, d, x, y, z, mat = wire) {
+  const e = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(w, h, d)), mat);
+  e.position.set(x, y, z);
+  scene.add(e);
+  return e;
+}
+edgeBox(8, 3, 6, 0, 1.5, 0);                                  // room shell
+edgeBox(2, 1.15, 0.9, -2.5, 0.7, -2.4);                       // sofa
+edgeBox(1.3, 0.52, 0.85, 1.85, 0.26, 0.62);                   // table
+edgeBox(0.5, 0.4, 0.5, 3.4, 0.2, -2.5);                       // plant pot
+const floorGrid = new THREE.GridHelper(8, 16, 0x24303f, 0x1a232e);
+floorGrid.scale.z = 0.75;
+scene.add(floorGrid);
+
+// Focal point marker
+const focus = new THREE.Mesh(
+  new THREE.SphereGeometry(0.06, 16, 16),
+  new THREE.MeshBasicMaterial({ color: 0x2dd4bf })
+);
+focus.position.set(0, 1.0, 0);
+scene.add(focus);
+
+// --- Full trajectory line ---
+const T = 600;
+let omega = 9;
+const pathGeo = new THREE.BufferGeometry();
+const pathMat = new THREE.LineBasicMaterial({ color: 0x2dd4bf, transparent: true, opacity: 0.45 });
+const pathLine = new THREE.Line(pathGeo, pathMat);
+scene.add(pathLine);
+
+function rebuildPath() {
+  const pts = [];
+  for (let k = 0; k <= T; k++) {
+    const [x, y, z] = trajectoryPoint(k / T, { omega });
+    pts.push(new THREE.Vector3(x, y, z));
+  }
+  pathGeo.setFromPoints(pts);
+}
+rebuildPath();
+
+// --- Animated camera frustum ---
+const fr = new THREE.Group();
+{
+  // Object3D.lookAt points local +Z at the target, so the base extends toward +d
+  const w = 0.30, h = 0.21, d = 0.42;
+  const cs = [[-w, -h, d], [w, -h, d], [w, h, d], [-w, h, d]];
+  const v = [];
+  for (let i = 0; i < 4; i++) {
+    v.push(0, 0, 0, ...cs[i]);
+    v.push(...cs[i], ...cs[(i + 1) % 4]);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(v), 3));
+  fr.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xe24545 })));
+}
+scene.add(fr);
+
+// Fading trail of recent positions
+const TRAIL = 90;
+const trailPos = new Float32Array(TRAIL * 3);
+const trailGeo = new THREE.BufferGeometry();
+trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
+scene.add(new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color: 0xe24545, transparent: true, opacity: 0.5 })));
+
+// --- Animation state ---
+let frame = 0, playing = true, speed = 1;
+const frameEl = document.getElementById('frame');
+const playBtn = document.getElementById('play');
+playBtn.onclick = () => { playing = !playing; playBtn.textContent = playing ? '⏸ pause' : '▶ play'; };
+document.getElementById('omega').oninput = (e) => { omega = parseInt(e.target.value); rebuildPath(); };
+document.getElementById('speed').oninput = (e) => (speed = parseFloat(e.target.value));
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+renderer.setAnimationLoop(() => {
+  if (playing) frame = (frame + speed) % T;
+  const [x, y, z] = trajectoryPoint(frame / T, { omega });
+  fr.position.set(x, y, z);
+  fr.lookAt(focus.position);
+  frameEl.textContent = Math.floor(frame);
+
+  for (let i = 0; i < TRAIL; i++) {
+    const k = ((frame - i * 1.6) % T + T) % T;
+    const [tx, ty, tz] = trajectoryPoint(k / T, { omega });
+    trailPos[3 * i] = tx; trailPos[3 * i + 1] = ty; trailPos[3 * i + 2] = tz;
+  }
+  trailGeo.attributes.position.needsUpdate = true;
+
+  controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>

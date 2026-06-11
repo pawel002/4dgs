@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import py_compile; [py_compile.compile\\(f, doraise=True\\) for f in ['arguments/__init__.py', 'train.py', 'train_video.py', 'render.py', 'render_video.py', 'scene/__init__.py', 'scene/gaussian_model.py', 'gaussian_renderer/__init__.py']]; print\\('All OK'\\)\")"
+    ]
+  }
+}

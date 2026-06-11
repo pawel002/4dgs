@@ -1,0 +1,14 @@
+\chapter{Uwagi Autora}
+\begin{itemize}
+     \item Aktualna wersja klasy jest dostępna pod adresem \url{https://github.com/polaksta/LaTeX/tree/master/agh-wi}\footnote{W przypadku Overleaf-a jest ona pod adresem  \url{https://www.overleaf.com/read/fnvcvqjyrbyw\#5ac622}}.
+    \item Skoro Twoja praca dyplomowa powstała w \LaTeX{}u, to zachęcam Cię również do przygotowania prezentacji (na obronę pracy magisterskiej) w tym języku. Najpopularniejszą klasą do tworzenia tego typu dokumentów jest \emph{beamer}.
+    \item Pod adresem \url{https://github.com/polaksta/LaTeX/tree/master/beamerthemeAGH}\footnote{W przypadku Overleaf-a jest on pod adresem  \url{https://www.overleaf.com/read/fkjdthnbrfhj\#9c6184}} możesz znaleźć, stworzony przeze mnie,  nasz uczelniany szablon dla prezentacji \LaTeX{} Beamer.
+    \item Jeżeli pewne elementy mają być wyróżniane w \alert{jednakowy} \alert{sposób}, to proponuję nie używać bezpośredniego stylowania, tzn.
+          \mint{tex}{\colorbox{red!50}{jednakowy} \colorbox{red!50}{sposób}} ale zdefiniować własną komendę stylującą, np. \verb+\alert+,
+          \mint{tex}{\newcommand{\alert}[1]{\colorbox{red!50}{#1}}}
+          a następnie użyć jej w dokumencie.
+          \mint{tex}{\alert{jednakowy} \alert{sposób}}
+
+          Dzięki temu, jeżeli będziesz chciał / chciała zmienić sposób stylowania tych elementów, np. niebieskie tło zamiast czerwonego, to wystarczy zmodyfikować, tylko, definicję komendy, zamiast zastępować, w tekście pracy dyplomowej, wybrane (niekoniecznie wszystkie!) wystąpienia tekstu \texttt{red}, tekstem \texttt{blue}.
+\end{itemize}
+Stanisław Polak

@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Linear velocity warm start</title>
+<link rel="stylesheet" href="demo.css" />
+<style>
+  .footer {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    text-align: center; padding: 12px;
+    color: #cbd5e1; font-size: 15px;
+    background: rgba(10, 13, 18, 0.82);
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .footer b { color: #2dd4bf; font-size: 18px; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div class="footer">average optimisation steps per frame — warm start converges <b id="speedup">…</b> faster</div>
+
+<script>
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+let W, H, dpr;
+
+function resize() {
+  dpr = Math.min(devicePixelRatio, 2);
+  W = innerWidth; H = innerHeight;
+  cv.width = W * dpr; cv.height = H * dpr;
+  cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+resize();
+addEventListener('resize', resize);
+
+// Ground-truth motion: smooth Lissajous path, advanced one "video frame" at a time.
+// Frequencies are low so the motion is smooth at frame scale (like 30 fps human motion):
+// then the warm-start residual (∝ acceleration) is much smaller than the displacement.
+function targetAt(k, panel) {
+  return {
+    x: panel.cx + panel.w * 0.32 * Math.sin(k * 0.20) + panel.w * 0.08 * Math.sin(k * 0.33),
+    y: panel.cy + panel.h * 0.28 * Math.sin(k * 0.16 + 1.2) + panel.h * 0.07 * Math.cos(k * 0.28),
+  };
+}
+
+function makeTracker(useVelocity, color, label, sub) {
+  return {
+    useVelocity, color, label, sub,
+    k: 0, est: null, init: null, target: null,
+    prev: null, prevPrev: null,
+    iters: 0, history: [], steps: [], totalIters: 0, frames: 0,
+    converged: false,
+  };
+}
+
+const trackers = [
+  makeTracker(false, '#94a3b8', 'No prediction', 'each frame starts from the previous position'),
+  makeTracker(true, '#2dd4bf', 'Linear velocity warm start', 'start from  μₜ₋₁ + (μₜ₋₁ − μₜ₋₂)'),
+];
+
+const ETA = 0.25, EPS = 3.0;
+let pauseUntil = 0;
+
+function panelRect(i) {
+  const pad = 18, footerH = 46;
+  const pw = (W - pad * 3) / 2, ph = H - footerH - pad * 2;
+  return { x: pad + i * (pw + pad), y: pad, w: pw, h: ph, cx: pad + i * (pw + pad) + pw / 2, cy: pad + ph / 2 };
+}
+
+function newFrame(tr, panel) {
+  tr.k += 1;
+  tr.prevPrev = tr.prev;
+  tr.prev = tr.target ? { ...tr.target } : null;
+  tr.target = targetAt(tr.k, panel);
+  if (tr.useVelocity && tr.prev && tr.prevPrev) {
+    tr.init = { x: tr.prev.x + (tr.prev.x - tr.prevPrev.x), y: tr.prev.y + (tr.prev.y - tr.prevPrev.y) };
+  } else {
+    tr.init = tr.prev ? { ...tr.prev } : { ...tr.target };
+  }
+  tr.est = { ...tr.init };
+  tr.iters = 0;
+  tr.steps = [{ ...tr.est }];
+  tr.converged = false;
+  tr.history.push({ ...tr.target });
+  if (tr.history.length > 40) tr.history.shift();
+}
+
+let lastStep = 0;
+function tick(time) {
+  // advance optimisation steps at a visible cadence
+  if (time > pauseUntil && time - lastStep > 90) {
+    lastStep = time;
+    let allDone = true;
+    for (let i = 0; i < 2; i++) {
+      const tr = trackers[i];
+      const panel = panelRect(i);
+      if (!tr.target) newFrame(tr, panel);
+      if (!tr.converged) {
+        const dx = tr.target.x - tr.est.x, dy = tr.target.y - tr.est.y;
+        if (Math.hypot(dx, dy) < EPS) {
+          tr.converged = true;
+          if (tr.k > 2) { tr.totalIters += tr.iters; tr.frames += 1; }
+        } else {
+          tr.est.x += ETA * dx; tr.est.y += ETA * dy;
+          tr.iters += 1;
+          tr.steps.push({ ...tr.est });
+          allDone = false;
+        }
+      }
+    }
+    if (allDone && trackers.every(t => t.converged)) {
+      pauseUntil = time + 650;
+      for (let i = 0; i < 2; i++) newFrame(trackers[i], panelRect(i));
+    }
+  }
+  draw();
+  requestAnimationFrame(tick);
+}
+
+function draw() {
+  ctx.fillStyle = '#0d1117';
+  ctx.fillRect(0, 0, W, H);
+
+  for (let i = 0; i < 2; i++) {
+    const tr = trackers[i];
+    const p = panelRect(i);
+
+    // panel chrome
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+    ctx.fillStyle = 'rgba(255,255,255,0.02)';
+    ctx.beginPath(); ctx.roundRect(p.x, p.y, p.w, p.h, 12); ctx.fill(); ctx.stroke();
+
+    ctx.fillStyle = tr.color;
+    ctx.font = '600 16px -apple-system, "Segoe UI", sans-serif';
+    ctx.fillText(tr.label, p.x + 16, p.y + 28);
+    ctx.fillStyle = 'rgba(148,163,184,0.8)';
+    ctx.font = '13px -apple-system, "Segoe UI", sans-serif';
+    ctx.fillText(tr.sub, p.x + 16, p.y + 48);
+
+    if (!tr.target) continue;
+
+    // ground-truth trail
+    ctx.strokeStyle = 'rgba(148,163,184,0.25)';
+    ctx.beginPath();
+    tr.history.forEach((q, j) => (j ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+    ctx.stroke();
+
+    // optimisation step ghosts
+    for (let s = 0; s < tr.steps.length; s++) {
+      const a = (s + 1) / tr.steps.length;
+      ctx.fillStyle = tr.color + '';
+      ctx.globalAlpha = 0.18 + 0.4 * a;
+      ctx.beginPath(); ctx.arc(tr.steps[s].x, tr.steps[s].y, 4, 0, 7); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    // line: init -> estimate
+    ctx.setLineDash([4, 4]);
+    ctx.strokeStyle = tr.color;
+    ctx.globalAlpha = 0.6;
+    ctx.beginPath(); ctx.moveTo(tr.init.x, tr.init.y); ctx.lineTo(tr.est.x, tr.est.y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+
+    // init marker
+    ctx.strokeStyle = tr.color;
+    ctx.beginPath(); ctx.arc(tr.init.x, tr.init.y, 7, 0, 7); ctx.stroke();
+
+    // target: the splat's true position this frame
+    ctx.strokeStyle = '#f8fafc';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(tr.target.x, tr.target.y, 11, 0, 7); ctx.stroke();
+    ctx.lineWidth = 1;
+    ctx.fillStyle = 'rgba(248,250,252,0.5)';
+    ctx.fillRect(tr.target.x - 1, tr.target.y - 16, 2, 8);
+    ctx.fillRect(tr.target.x - 1, tr.target.y + 8, 2, 8);
+
+    // estimate
+    ctx.fillStyle = tr.color;
+    ctx.beginPath(); ctx.arc(tr.est.x, tr.est.y, 6.5, 0, 7); ctx.fill();
+
+    // stats
+    const avg = tr.frames ? (tr.totalIters / tr.frames) : 0;
+    ctx.fillStyle = '#e2e8f0';
+    ctx.font = '600 15px ui-monospace, Menlo, monospace';
+    ctx.fillText(`steps: ${String(tr.iters).padStart(2, ' ')}`, p.x + 16, p.y + p.h - 40);
+    ctx.fillStyle = 'rgba(148,163,184,0.9)';
+    ctx.fillText(`avg:   ${avg.toFixed(1)}`, p.x + 16, p.y + p.h - 18);
+  }
+
+  const [a, b] = trackers;
+  if (a.frames > 1 && b.frames > 1) {
+    const ratio = (a.totalIters / a.frames) / (b.totalIters / b.frames);
+    document.getElementById('speedup').textContent = '≈' + ratio.toFixed(1) + '×';
+  }
+}
+
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>

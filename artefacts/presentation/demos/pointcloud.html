@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Sparse cloud + camera poses</title>
+<link rel="stylesheet" href="demo.css" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "../vendor/three/three.module.js",
+    "three/addons/": "../vendor/three/addons/"
+  }
+}
+</script>
+</head>
+<body>
+<div class="tag">Sparse reconstruction: <b>point cloud</b> + recovered <b>camera poses</b> (COLMAP-style)</div>
+<div class="hint">drag to orbit &middot; scroll to zoom</div>
+<div class="hud">
+  <label><input type="checkbox" id="cams" checked /> camera frusta</label>
+  <label>point size <input type="range" id="size" min="0.3" max="2.5" step="0.05" value="0.9" /></label>
+  <label>sparsity <input type="range" id="sparsity" min="0.05" max="1" step="0.05" value="0.35" /></label>
+  <div class="spacer"></div>
+  <div>points: <span class="stat" id="count">–</span> &nbsp;·&nbsp; cameras: <span class="stat" id="ncams">48</span></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { buildRoomPoints, frustaSegments, mulberry32 } from './room.js';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d1117);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.05, 100);
+camera.position.set(5.4, 4.2, 6.4);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1.0, 0);
+controls.enableDamping = true;
+controls.maxDistance = 20;
+
+const room = buildRoomPoints(420);
+
+// SfM yields a *sparse* cloud — keep a random subset, adjustable live.
+const rnd = mulberry32(99);
+const keepMask = new Float32Array(room.count);
+for (let i = 0; i < room.count; i++) keepMask[i] = rnd();
+
+const geo = new THREE.BufferGeometry();
+geo.setAttribute('position', new THREE.BufferAttribute(room.positions, 3));
+geo.setAttribute('color', new THREE.BufferAttribute(room.colors, 3));
+geo.setAttribute('aKeep', new THREE.BufferAttribute(keepMask, 1));
+
+const uniforms = {
+  uSize: { value: 0.9 },
+  uKeep: { value: 0.35 },
+  uViewportH: { value: innerHeight },
+};
+
+const material = new THREE.ShaderMaterial({
+  uniforms,
+  vertexColors: true,
+  vertexShader: /* glsl */`
+    attribute float aKeep;
+    varying vec3 vColor;
+    varying float vDiscard;
+    uniform float uSize, uKeep, uViewportH;
+    void main() {
+      vColor = color;
+      vDiscard = step(uKeep, aKeep); // 1 -> hide this point
+      vec4 mv = modelViewMatrix * vec4(position, 1.0);
+      gl_PointSize = clamp(uSize * (uViewportH * 0.006) * (10.0 / -mv.z), 1.0, 14.0);
+      gl_Position = projectionMatrix * mv;
+    }`,
+  fragmentShader: /* glsl */`
+    varying vec3 vColor;
+    varying float vDiscard;
+    void main() {
+      if (vDiscard > 0.5) discard;
+      vec2 c = gl_PointCoord - 0.5;
+      if (dot(c, c) > 0.25) discard;
+      gl_FragColor = vec4(vColor, 1.0);
+    }`,
+});
+scene.add(new THREE.Points(geo, material));
+
+// Red wireframe frusta along the capture trajectory (like the C++ viewer)
+const frusta = new THREE.LineSegments(
+  frustaSegments(THREE, 48),
+  new THREE.LineBasicMaterial({ color: 0xe24545, transparent: true, opacity: 0.85 })
+);
+scene.add(frusta);
+
+const countEl = document.getElementById('count');
+function updateCount() {
+  const k = uniforms.uKeep.value;
+  let n = 0;
+  for (let i = 0; i < room.count; i++) if (keepMask[i] < k) n++;
+  countEl.textContent = n.toLocaleString('en-US');
+}
+updateCount();
+
+document.getElementById('size').oninput = (e) => (uniforms.uSize.value = parseFloat(e.target.value));
+document.getElementById('sparsity').oninput = (e) => { uniforms.uKeep.value = parseFloat(e.target.value); updateCount(); };
+document.getElementById('cams').onchange = (e) => (frusta.visible = e.target.checked);
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  uniforms.uViewportH.value = innerHeight;
+});
+
+renderer.setAnimationLoop(() => {
+  controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>

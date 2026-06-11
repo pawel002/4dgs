@@ -1,0 +1,468 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Precise 3D Reconstruction of Indoor Environments from Multi-RGB Camera Images</title>
+  <link rel="stylesheet" href="vendor/reveal/reveal.css" />
+  <link rel="stylesheet" href="css/theme.css" />
+</head>
+<body>
+<div class="reveal">
+<div class="slides">
+
+<!-- ======================================================= 1 · TITLE -->
+<section class="title-slide">
+  <div class="logo-card"><img src="assets/logo.png" alt="AGH Informatyka" /></div>
+  <h1>Precise 3D Reconstruction of Indoor Environments from Multi-RGB Camera Images</h1>
+  <p class="subtitle">Precyzyjna rekonstrukcja 3D pomieszczeń za pomocą obrazów z&nbsp;wielu kamer RGB</p>
+  <p class="meta">
+    <b>inż. Paweł Jarosz</b><br/>
+    <span class="dim">Supervisor: dr Paweł Gajewski</span><br/>
+    <span class="dim">Master's Thesis · AGH University of Krakow · 2026</span>
+  </p>
+  <aside class="notes">
+    Welcome. ~30s. One sentence: the thesis reconstructs moving indoor scenes in 3D from
+    ordinary RGB cameras, so they can be re-rendered in real time from any viewpoint.
+  </aside>
+</section>
+
+<!-- ======================================================= 2 · MOTIVATION -->
+<section>
+  <span class="kicker">Motivation</span>
+  <h2>Why build a digital twin of a room?</h2>
+  <div class="cols">
+    <div class="col">
+      <ul style="font-size: 0.85em;">
+        <li>Experimental psychology &amp; behavioural research want <b>reproducible testing environments</b></li>
+        <li>A useful twin preserves <b>geometry</b>, <b>appearance</b> — and <b class="accent">motion</b> (a 4D scene)</li>
+        <li>Reconstruction accuracy is a <b>prerequisite for experiment validity</b>, not an aesthetic choice</li>
+      </ul>
+    </div>
+    <div class="col">
+      <img class="framed" src="assets/room_mosaic.png" alt="Synthetic room views" />
+      <p class="caption">Views of the indoor environment used throughout this work</p>
+    </div>
+  </div>
+  <aside class="notes">
+    ~1 min. Digital twins as testbeds for cognitive experiments: a participant's movement and
+    decisions can be studied against a faithful 4D copy of the room. Accuracy = validity.
+  </aside>
+</section>
+
+<!-- ======================================================= 3 · THE TASK -->
+<section>
+  <span class="kicker">Problem</span>
+  <h2>The task</h2>
+  <div class="flow">
+    <div class="step">
+      <b>Input</b>
+      synchronized multi-view <b>RGB video</b>
+      <span class="dim">fixed cameras, indoor scene, a few moving actors</span>
+    </div>
+    <div class="arrow">→</div>
+    <div class="step hot">
+      <b>Reconstruction</b>
+      a <b>time-varying 3D representation</b>
+      <span class="dim">same scene, coherent across all frames</span>
+    </div>
+    <div class="arrow">→</div>
+    <div class="step">
+      <b>Output</b>
+      <b>real-time novel views</b> at any moment t
+      <span class="dim">rendered &gt;100 FPS on consumer GPUs</span>
+    </div>
+  </div>
+  <div class="chips">
+    <span class="chip on">multi-view RGB only</span>
+    <span class="chip on">static, synchronized cameras</span>
+    <span class="chip on">controlled indoor lighting</span>
+    <span class="chip off">no LiDAR / depth sensors</span>
+    <span class="chip off">no outdoor scenes</span>
+    <span class="chip off">no smoke / fluids</span>
+  </div>
+  <aside class="notes">
+    ~1 min. Deliberate scope: camera-only capture keeps the rig low-cost; static cameras mean
+    COLMAP calibration is done once, on the first frame. Offline training, real-time playback.
+  </aside>
+</section>
+
+<!-- ======================================================= 4 · WHY HARD -->
+<section>
+  <span class="kicker">Problem</span>
+  <h2>Why naive per-frame reconstruction fails</h2>
+  <div class="cards c4">
+    <div class="card">
+      <h3>Computational cost</h3>
+      <p>Retraining each frame from scratch: 1&nbsp;min of 30&nbsp;fps video ⇒ <b>5.4&nbsp;×&nbsp;10⁷ optimizer steps</b> — the static background is re-learned 1,800 times.</p>
+    </div>
+    <div class="card">
+      <h3>Lost correspondence</h3>
+      <p>Free optimization gives no guarantee the <b>same splat tracks the same physical feature</b> — trajectories and motion analysis become impossible.</p>
+    </div>
+    <div class="card">
+      <h3>Colour-hallucinated motion</h3>
+      <p>The loss is happy to <b>repaint</b> splats instead of <b>moving</b> them — subjects smear into the background as flat "paintings".</p>
+    </div>
+    <div class="card">
+      <h3>Storage growth</h3>
+      <p>One independent Gaussian field per frame grows <b>linearly with time × splat count</b> — untenable for minutes-long captures.</p>
+    </div>
+  </div>
+  <aside class="notes">
+    ~1.5 min. These four failure modes drive every design decision in the method.
+    Highlight colour-hallucinated motion — it motivates freezing the SH coefficients later.
+  </aside>
+</section>
+
+<!-- ======================================================= 5 · TIMELINE -->
+<section>
+  <span class="kicker">Background</span>
+  <h2>Three eras of 3D reconstruction</h2>
+  <div class="timeline">
+    <div class="era geo">
+      <h3>Geometric</h3>
+      <div class="item"><span class="yr">1981</span><b>8-point algorithm</b> — two-view geometry in closed form</div>
+      <div class="item"><span class="yr">1992</span><b>Factorisation</b> — shape + motion from a rank constraint</div>
+      <div class="item"><span class="yr">2006</span><b>Photo Tourism</b> — SfM at internet scale</div>
+      <div class="item"><span class="yr">2016</span><b>COLMAP</b> — the SfM gold standard, still seeds every radiance field</div>
+    </div>
+    <div class="era neural">
+      <h3>Implicit neural</h3>
+      <div class="item"><span class="yr">2020</span><b>NeRF</b> — scene as an MLP; photorealistic but ~1 day to train</div>
+      <div class="item"><span class="yr">2022</span><b>Instant-NGP</b> — hash grids; the MLP shrinks into a decoder</div>
+    </div>
+    <div class="era explicit">
+      <h3>Explicit radiance fields</h3>
+      <div class="item"><span class="yr">2023</span><b>3D Gaussian Splatting</b> — the network disappears entirely; NeRF quality at &gt;100 FPS</div>
+      <div class="item"><span class="yr">2024+</span><b>4D extensions</b> — the open frontier <span class="accent">← this thesis</span></div>
+    </div>
+  </div>
+  <aside class="notes">
+    ~1 min, fast. The arc: geometry → networks → explicit primitives that keep differentiability.
+    COLMAP survives as the initialisation everyone uses. The temporal domain is unsettled.
+  </aside>
+</section>
+
+<!-- ======================================================= 6 · 3DGS PRIMER -->
+<section>
+  <span class="kicker">Background</span>
+  <h2>3D Gaussian Splatting in 60 seconds</h2>
+  <div class="cols">
+    <div class="col">
+      <ul style="font-size: 0.78em;">
+        <li>Scene = millions of <b>soft ellipsoidal particles</b>: position&nbsp;μ, covariance&nbsp;Σ&nbsp;=&nbsp;R&thinsp;S&thinsp;Sᵀ&thinsp;Rᵀ, opacity, spherical-harmonic colour</li>
+        <li>Rendered by <b>splatting</b> — project to 2D, depth-sort, alpha-blend in a tile rasterizer → <b class="accent">&gt;100 FPS</b></li>
+        <li>Trained end-to-end through a <b>differentiable rasterizer</b>, with adaptive <b>clone / split / prune</b> density control</li>
+        <li>Entire scene serializes to a <b>single PLY file</b> — inspectable, portable</li>
+      </ul>
+    </div>
+    <div class="col">
+      <img class="framed" src="assets/gaussian-pipeline.png" alt="3DGS pipeline" />
+      <p class="caption">The 3DGS optimization loop (Kerbl et al., 2023) — seeded by SfM points</p>
+    </div>
+  </div>
+  <aside class="notes">
+    ~1.5 min. Key contrast vs NeRF: no ray marching, no MLP — rasterization, the operation GPUs
+    were built for. Explicit primitives will be what lets us track motion per-splat.
+  </aside>
+</section>
+
+<!-- ======================================================= 7 · DEMO SPLATS -->
+<section class="demo">
+  <h2 style="margin-bottom: 14px;">From points to splats <span class="demo-label">INTERACTIVE</span></h2>
+  <iframe class="demo-frame" data-src="demos/splats.html" data-preload allow="fullscreen"></iframe>
+  <aside class="notes">
+    ~1.5 min. Toggle the checkbox: same primitives as hard points vs soft Gaussians.
+    Raise size/opacity to show how splats blend into continuous surfaces. Orbit around the room.
+  </aside>
+</section>
+
+<!-- ======================================================= 8 · DYNAMIC LANDSCAPE -->
+<section>
+  <span class="kicker">Related work</span>
+  <h2>Dynamic 3DGS today: ever more machinery</h2>
+  <div class="cards c3">
+    <div class="card">
+      <h3>Deformable 3DGS</h3>
+      <p>Canonical splat set + <b>deformation MLP</b> that must memorise every trajectory in the scene.</p>
+    </div>
+    <div class="card">
+      <h3>4D-GS</h3>
+      <p><b>HexPlane spatio-temporal bases</b> + decoder MLP — imposes a low-rank assumption on motion.</p>
+    </div>
+    <div class="card">
+      <h3>SpaceTime Gaussians</h3>
+      <p><b>Per-splat polynomial</b> trajectories — cheaper inference, enlarged parameter set per splat.</p>
+    </div>
+  </div>
+  <p style="margin-top: 36px; font-size: 0.9em;">
+    Each adds <b>auxiliary machinery</b> — with its own training dynamics and failure modes.<br/>
+    <span class="accent" style="font-weight: 600;">Is an almost machinery-free extension sufficient for indoor, static-camera captures?</span>
+  </p>
+  <aside class="notes">
+    ~1 min. All three solve the general case (moving cameras, arbitrary scenes). Our regime is
+    narrower: rigid background, sparse motion, fixed cameras — maybe simpler is enough.
+  </aside>
+</section>
+
+<!-- ======================================================= 9 · RESEARCH QUESTIONS -->
+<section>
+  <span class="kicker">This thesis</span>
+  <h2>Research questions</h2>
+  <div class="cards c3">
+    <div class="card">
+      <h3><span class="badge">Q1</span>Structure</h3>
+      <p>Can a dynamic indoor scene be reconstructed from a <b>fixed first-frame baseline</b> plus direct tracking — <b>no neural networks</b>?</p>
+    </div>
+    <div class="card">
+      <h3><span class="badge">Q2</span>Physical accuracy</h3>
+      <p>Does <b>freezing colour</b> (spherical harmonics) force the optimizer to capture <b>true physical motion</b> instead of repainting?</p>
+    </div>
+    <div class="card">
+      <h3><span class="badge">Q3</span>Efficiency</h3>
+      <p>How much compute does a <b>linear velocity prediction</b> save when warm-starting each frame's optimization?</p>
+    </div>
+  </div>
+  <p style="margin-top: 34px; font-size: 0.68em;" class="dim">
+    + a methodological goal: build the full evaluation stack — synthetic ground-truth dataset, COLMAP pipeline,
+    interactive C++ renderer, per-frame PLY format.
+  </p>
+  <aside class="notes">
+    ~1 min. These three questions structure the contribution and map 1:1 onto the design choices shown next.
+  </aside>
+</section>
+
+<!-- ======================================================= 10 · METHOD PIPELINE -->
+<section>
+  <span class="kicker">Method</span>
+  <h2>Proposed pipeline</h2>
+  <div class="flow">
+    <div class="step">
+      <b>COLMAP · frame 0</b>
+      camera poses + sparse cloud
+      <span class="dim">computed once — cameras never move</span>
+    </div>
+    <div class="arrow">→</div>
+    <div class="step">
+      <b>Key frame</b>
+      full 3DGS fit · 2,000 iters
+      <span class="dim">densification on + dark-splat pruning</span>
+    </div>
+    <div class="arrow">→</div>
+    <div class="step hot">
+      <b>Tracking · every frame t</b>
+      velocity warm start → 500 iters
+      <span class="dim">topology frozen · colours frozen</span>
+    </div>
+    <div class="arrow">→</div>
+    <div class="step">
+      <b>Output</b>
+      one PLY per frame
+      <span class="dim">real-time 4D playback</span>
+    </div>
+  </div>
+  <p style="font-size: 0.78em; margin-top: 24px;">
+    The static–dynamic split is <b class="accent">emergent</b>: background splats receive ≈ zero gradient and stay put;
+    splats on moving subjects are pushed along the motion — <b>no segmentation model needed</b>.
+  </p>
+  <aside class="notes">
+    ~1.5 min. Asymmetric budgets: keyframe establishes topology, tracking only propagates small
+    geometric deltas (~25% of keyframe cost). Stress "emergent" — the optimization itself separates
+    static from dynamic.
+  </aside>
+</section>
+
+<!-- ======================================================= 11 · THREE CONSTRAINTS -->
+<section>
+  <span class="kicker">Method</span>
+  <h2>Three constraints do all the work</h2>
+  <div class="cards c3">
+    <div class="card">
+      <h3><span class="badge">1</span>Frozen topology</h3>
+      <p>No clone / split / prune after frame 0 ⇒ |𝒢ₜ| = |𝒢₀| and a <b>1-to-1 splat correspondence</b> across the whole video.</p>
+    </div>
+    <div class="card">
+      <h3><span class="badge">2</span>Frozen colours</h3>
+      <p>SH coefficients locked after frame 0 ⇒ motion <b>must</b> be explained geometrically. Matches physics: reflectance is stable, position is not.</p>
+    </div>
+    <div class="card">
+      <h3><span class="badge">3</span>Velocity warm start</h3>
+      <p>Constant-velocity prediction before each frame ⇒ initial error is bounded by <b>acceleration</b>, not velocity — sub-pixel at 30 fps.</p>
+    </div>
+  </div>
+  <div class="eqbox" style="text-align: center;">
+    μₜ ← μₜ₋₁ + (μₜ₋₁ − μₜ₋₂) &nbsp;&nbsp;<span class="dim">— a single in-place tensor addition; zero extra parameters</span>
+  </div>
+  <aside class="notes">
+    ~1.5 min. Constraint 2 directly answers the colour-hallucination failure mode from slide 4.
+    Constraint 3 is first-order Taylor: the optimizer only pays for the acceleration residual.
+  </aside>
+</section>
+
+<!-- ======================================================= 12 · DEMO DYNAMIC -->
+<section class="demo">
+  <h2 style="margin-bottom: 14px;">Tracking with a frozen splat set <span class="demo-label">INTERACTIVE</span></h2>
+  <iframe class="demo-frame" data-src="demos/dynamic.html" data-preload allow="fullscreen"></iframe>
+  <aside class="notes">
+    ~2 min. Conceptual visualization: the splat count never changes while the subject walks.
+    Toggle "color by displacement" — the emergent static–dynamic partition, no segmentation.
+    Toggle "splat trajectories" — 1:1 correspondence enables motion analysis.
+  </aside>
+</section>
+
+<!-- ======================================================= 13 · DEMO VELOCITY -->
+<section class="demo">
+  <h2 style="margin-bottom: 14px;">Why the warm start pays off <span class="demo-label">INTERACTIVE</span></h2>
+  <iframe class="demo-frame" data-src="demos/velocity.html" data-preload></iframe>
+  <aside class="notes">
+    ~1.5 min. Both trackers chase the same moving splat. Left: initialized at the previous
+    position — pays for the full inter-frame displacement. Right: linear extrapolation — only
+    pays for the acceleration residual. Watch the live average and speedup factor.
+  </aside>
+</section>
+
+<!-- ======================================================= 14 · EVALUATION ENV -->
+<section class="demo">
+  <span class="kicker">Evaluation</span>
+  <h2>A synthetic room with perfect ground truth</h2>
+  <div class="cols">
+    <div class="col" style="font-size: 0.72em;">
+      <ul>
+        <li>Full room modelled in <b>Blender</b> — varied materials, high-frequency textures, complex occlusion</li>
+        <li><b>Mathematically exact</b> intrinsics &amp; extrinsics exported via <code>bpy</code> — isolates 3DGS errors from SfM noise</li>
+        <li>Ideal pinhole camera — <b>zero lens distortion</b></li>
+        <li>Drone-like oscillating orbit for uniform view coverage</li>
+      </ul>
+      <img class="framed" src="assets/room_layout.png" style="max-height: 240px; margin-top: 8px;" alt="Room layout" />
+    </div>
+    <div class="col wide">
+      <iframe class="demo-frame" style="height: 560px;" data-src="demos/trajectory.html" data-preload></iframe>
+    </div>
+  </div>
+  <aside class="notes">
+    ~1.5 min. The parametric path: circular xy-orbit + fast sinusoidal height oscillation (ω slider).
+    Mention: real-world evaluation is also planned — synthetic first to isolate the algorithm.
+  </aside>
+</section>
+
+<!-- ======================================================= 15 · COLMAP + TOOLING -->
+<section class="demo">
+  <span class="kicker">Evaluation</span>
+  <h2>Initialisation &amp; custom inspection tooling</h2>
+  <div class="cols">
+    <div class="col" style="font-size: 0.72em;">
+      <ul>
+        <li><b>COLMAP sparse SfM</b>: SIFT features → exhaustive matching + RANSAC → incremental mapping + bundle adjustment</li>
+        <li>Run <b>once</b>, on frame 0 — static cameras keep calibration valid for the whole video</li>
+        <li>Custom <b>C++ / OpenGL viewer</b>: point clouds, GPU-instanced camera frusta, ImGui controls — later extended to render <b>static &amp; dynamic Gaussians</b></li>
+      </ul>
+      <img class="framed" src="assets/point-cloud.png" style="margin-top: 8px;" alt="C++ viewer screenshot" />
+      <p class="caption">The actual C++ viewer: reconstructed cloud + camera "ghosts"</p>
+    </div>
+    <div class="col wide">
+      <iframe class="demo-frame" style="height: 560px;" data-src="demos/pointcloud.html" data-preload></iframe>
+    </div>
+  </div>
+  <aside class="notes">
+    ~1.5 min. The live demo mirrors what the C++ tool does (left screenshot is the real one).
+    Sparsity slider: this is what 3DGS is seeded from — sparse in, dense radiance field out.
+  </aside>
+</section>
+
+<!-- ======================================================= 16 · RESULTS (WIP) -->
+<section>
+  <span class="kicker">Results</span>
+  <h2>Experimental evaluation</h2>
+  <div class="cards c4">
+    <div class="placeholder">
+      <div class="tag-wip">IN PROGRESS</div>
+      <p><b>Static baseline quality</b> — PSNR / SSIM / LPIPS of the 30k-iteration static reconstruction vs held-out ground-truth views.</p>
+    </div>
+    <div class="placeholder">
+      <div class="tag-wip">IN PROGRESS</div>
+      <p><b>Velocity-prediction ablation</b> — tracking quality and convergence speed with <code>--no-velocity</code> vs warm start (Q3).</p>
+    </div>
+    <div class="placeholder">
+      <div class="tag-wip">PLANNED</div>
+      <p><b>Colour-freeze ablation</b> — quantifying colour-hallucinated motion when SH coefficients are left free (Q2).</p>
+    </div>
+    <div class="placeholder">
+      <div class="tag-wip">PLANNED</div>
+      <p><b>Real-world capture</b> — multi-camera rig recording of an actual room with a moving subject.</p>
+    </div>
+  </div>
+  <aside class="notes">
+    ~1 min. Be transparent: the pipeline is implemented end-to-end; the quantitative benchmark
+    matrix is being filled in. Each cell maps back to a research question.
+  </aside>
+</section>
+
+<!-- ======================================================= 17 · CONCLUSIONS -->
+<section>
+  <span class="kicker">Closing</span>
+  <h2>Contributions &amp; what's next</h2>
+  <div class="cols" style="align-items: flex-start;">
+    <div class="col">
+      <h3 class="accent">Contributions</h3>
+      <ul style="font-size: 0.7em;">
+        <li>A <b>minimal, machinery-free</b> dynamic 3DGS pipeline for indoor multi-view video</li>
+        <li><b>Emergent</b> static–dynamic decomposition — no segmentation networks</li>
+        <li>Synthetic benchmark with analytic ground truth + full COLMAP tooling</li>
+        <li>Interactive C++ renderer &amp; a unified per-frame PLY format</li>
+      </ul>
+    </div>
+    <div class="col">
+      <h3 class="warm">Future work</h3>
+      <ul style="font-size: 0.7em;">
+        <li>Quantitative comparison vs Deformable&nbsp;3DGS / 4D-GS <span class="dim">(pending)</span></li>
+        <li>Towards <b>online / real-time</b> tracking — closed-form updates instead of inner loops</li>
+        <li>Real-world capture rigs and longer sequences</li>
+        <li>Deployment in behavioural-research digital twins</li>
+      </ul>
+    </div>
+  </div>
+  <p style="margin-top: 22px; font-size: 0.62em;" class="dim">
+    Conclusions are preliminary — final findings will follow the completed evaluation.
+  </p>
+  <aside class="notes">
+    ~1 min. The "less is more" claim: in the indoor static-camera regime, three constraints replace
+    entire networks — and as a bonus you get per-splat trajectories for free.
+  </aside>
+</section>
+
+<!-- ======================================================= 18 · THANK YOU -->
+<section class="title-slide">
+  <h1 style="margin-top: 120px;">Thank you</h1>
+  <p class="subtitle">Questions?</p>
+  <p class="meta" style="margin-top: 80px;">
+    <b>inż. Paweł Jarosz</b><br/>
+    <span class="dim">Precise 3D Reconstruction of Indoor Environments from Multi-RGB Camera Images</span><br/>
+    <span class="dim">AGH University of Krakow · 2026</span>
+  </p>
+  <aside class="notes">Anticipate: why not compare to NeRF-based dynamic methods (too slow for this regime);
+  how does it handle new objects entering the scene (limitation — topology frozen); metric scale (COLMAP arbitrary scale, synthetic gives exact).</aside>
+</section>
+
+</div>
+</div>
+
+<script src="vendor/reveal/reveal.js"></script>
+<script src="vendor/reveal/notes.js"></script>
+<script>
+  Reveal.initialize({
+    hash: true,
+    width: 1280,
+    height: 720,
+    margin: 0.045,
+    transition: 'fade',
+    backgroundTransition: 'fade',
+    slideNumber: 'c/t',
+    controlsTutorial: false,
+    viewDistance: 2,
+    preloadIframes: true,
+    plugins: [RevealNotes],
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,85 @@
+\begin{tikzpicture}[
+    font=\small,
+    posbox/.style={draw, rectangle, minimum width=0.95cm, minimum height=0.75cm,
+                   fill=blue!20, draw=blue!60!black, thick},
+    colbox/.style={draw, rectangle, minimum width=0.95cm, minimum height=0.75cm,
+                   fill=orange!30, draw=orange!70!black, thick},
+    brace/.style={decorate, decoration={brace, amplitude=5pt, raise=2pt}, thick},
+    attr/.style={draw, rounded corners=3pt, thick, minimum width=2.6cm,
+                 minimum height=0.75cm, align=center},
+]
+ 
+% ---- VAO attribute boxes (top) ------------------------------------------
+\node[anchor=west, font=\bfseries] at (-1.8, 2.55) {VAO};
+ 
+\node[attr, fill=blue!15,   draw=blue!60!black]   (loc0)
+      at (1.40, 2.55) {\texttt{location 0}\\ position (3$\times$float)};
+\node[attr, fill=orange!20, draw=orange!70!black] (loc1)
+      at (4.75, 2.55) {\texttt{location 1}\\ color (3$\times$float)};
+ 
+% ---- Interleaved VBO strip (vertex 0 then vertex 1) ---------------------
+% vertex 0 - position
+\node[posbox] (p0x) at (0.00,0) {\texttt{p.x}};
+\node[posbox] (p0y) at (0.95,0) {\texttt{p.y}};
+\node[posbox] (p0z) at (1.90,0) {\texttt{p.z}};
+% vertex 0 - color
+\node[colbox] (c0r) at (2.85,0) {\texttt{c.r}};
+\node[colbox] (c0g) at (3.80,0) {\texttt{c.g}};
+\node[colbox] (c0b) at (4.75,0) {\texttt{c.b}};
+% vertex 1 - position
+\node[posbox] (p1x) at (5.70,0) {\texttt{p.x}};
+\node[posbox] (p1y) at (6.65,0) {\texttt{p.y}};
+\node[posbox] (p1z) at (7.60,0) {\texttt{p.z}};
+% vertex 1 - color
+\node[colbox] (c1r) at (8.55,0) {\texttt{c.r}};
+\node[colbox] (c1g) at (9.50,0) {\texttt{c.g}};
+\node[colbox] (c1b) at (10.45,0) {\texttt{c.b}};
+% continuation
+\node at (11.25,0) {$\cdots$};
+ 
+% ---- Byte offsets below each cell ---------------------------------------
+\foreach \x/\b in {0/0, 0.95/4, 1.90/8, 2.85/12, 3.80/16, 4.75/20,
+                   5.70/24, 6.65/28, 7.60/32, 8.55/36, 9.50/40, 10.45/44} {
+    \node[font=\scriptsize, gray!50!black] at (\x,-0.55) {\b};
+}
+\node[font=\scriptsize, gray!50!black, anchor=west] at (10.95,-0.55) {bytes};
+ 
+% ---- Vertex brackets above ----------------------------------------------
+\draw[brace] (-0.475,0.45) -- (5.225,0.45)
+      node[midway, above=8pt, font=\bfseries] {vertex 0};
+
+\draw[brace] (5.225,0.45) -- (10.925,0.45)
+      node[midway, above=8pt, font=\bfseries] {vertex 1};
+ 
+% ---- Stride indicator ---------------------------------------------------
+\draw[{Latex[length=2mm]}-{Latex[length=2mm]}, thick]
+      (-0.475,-2) -- (5.225,-2)
+      node[midway, below, font=\bfseries] {stride = 24 bytes};
+ 
+% ---- Offset indicators --------------------------------------------------
+% \draw[{Latex[length=2mm]}-{Latex[length=2mm]}, thick, blue!60!black]
+%       (-0.475,-1.85) -- (-0.475,-1.85);
+\node[blue!60!black, anchor=west, font=\small\bfseries]
+      at (-0.55,-1) {position:};
+\node[blue!60!black, anchor=west, font=\small\bfseries]
+      at (-0.55,-1.5) {offset 0};
+      
+\node[orange!70!black, anchor=west, font=\small\bfseries]
+      at (2.4,-1) {color:};
+\node[orange!70!black, anchor=west, font=\small\bfseries]
+      at (2.4,-1.5) {offset 12};
+ 
+% Tick marks showing where offsets land
+\draw[blue!60!black, thick, ->] (-0.475,-0.40) -- (-0.475,-2);
+\draw[orange!70!black, thick, ->] ( 2.375,-0.40) -- ( 2.375,-2);
+ 
+% ---- Arrows from VAO attributes down to VBO -----------------------------
+\draw[-{Latex[length=2.5mm]}, thick, blue!60!black]
+      (loc0.south) .. controls +(0,-0.6) and +(0,0.7) .. (0.95, 0.40);
+\draw[-{Latex[length=2.5mm]}, thick, orange!70!black]
+      (loc1.south) .. controls +(0,-0.6) and +(0,0.7) .. (3.80, 0.40);
+ 
+% ---- VBO label ----------------------------------------------------------
+\node[anchor=west, font=\bfseries] at (-1.8, 0) {VBO};
+ 
+\end{tikzpicture}

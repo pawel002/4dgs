@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Dynamic tracking — frozen topology</title>
+<link rel="stylesheet" href="demo.css" />
+<script type="importmap">
+{
+  "imports": {
+    "three": "../vendor/three/three.module.js",
+    "three/addons/": "../vendor/three/addons/"
+  }
+}
+</script>
+</head>
+<body>
+<div class="tag" id="tag">One shared splat set — only <b>positions</b> evolve, colors stay frozen</div>
+<div class="hint">drag to orbit &middot; scroll to zoom</div>
+<div class="hud">
+  <button id="play">⏸ pause</button>
+  <label style="flex:2; min-width: 220px;">t <input type="range" id="timeline" min="0" max="239" step="1" value="0" style="width: 100%;" /></label>
+  <label><input type="checkbox" id="disp" /> color by displacement D<sub>i</sub></label>
+  <label><input type="checkbox" id="trails" /> splat trajectories</label>
+  <div class="spacer"></div>
+  <div>frame <span class="stat" id="frame">0</span> · |𝒢| = <span class="stat" id="count">–</span> <span style="color:#64748b">(constant)</span></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { buildRoomPoints, mulberry32 } from './room.js';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d1117);
+
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.05, 100);
+camera.position.set(4.8, 3.6, 6.0);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1.0, 0);
+controls.enableDamping = true;
+controls.maxDistance = 18;
+
+// ---------- Static room ----------
+const room = buildRoomPoints(380);
+
+// ---------- Moving actor: a point-sampled person ----------
+const rnd = mulberry32(2024);
+const actorBase = [];   // local offsets [x, y, z]
+const actorColor = [];  // natural colors
+
+function actorPart(n, fn) {
+  for (let i = 0; i < n; i++) {
+    const { p, c } = fn();
+    actorBase.push(...p);
+    actorColor.push(...c);
+  }
+}
+const J = (s) => (rnd() - 0.5) * s;
+
+// legs
+actorPart(700, () => {
+  const side = rnd() < 0.5 ? -0.11 : 0.11;
+  const h = rnd() * 0.78;
+  const th = rnd() * Math.PI * 2, r = 0.07 * Math.sqrt(rnd());
+  return { p: [r * Math.cos(th), h, side + r * Math.sin(th)], c: [0.16 + J(0.03), 0.18 + J(0.03), 0.22 + J(0.03)] };
+});
+// torso
+actorPart(1100, () => {
+  const h = 0.78 + rnd() * 0.62;
+  const th = rnd() * Math.PI * 2;
+  const r = (0.20 - (h - 0.78) * 0.07) * Math.sqrt(rnd());
+  return { p: [r * Math.cos(th), h, r * Math.sin(th) * 1.35], c: [0.06 + J(0.04), 0.55 + J(0.06), 0.5 + J(0.05)] };
+});
+// arms
+actorPart(360, () => {
+  const side = rnd() < 0.5 ? -0.27 : 0.27;
+  const h = 0.85 + rnd() * 0.5;
+  const th = rnd() * Math.PI * 2, r = 0.05 * Math.sqrt(rnd());
+  return { p: [r * Math.cos(th), h, side + r * Math.sin(th)], c: [0.07 + J(0.04), 0.5 + J(0.05), 0.46 + J(0.05)] };
+});
+// head
+actorPart(420, () => {
+  const u = rnd() * Math.PI * 2, v = Math.acos(2 * rnd() - 1);
+  const r = 0.135 * Math.cbrt(rnd());
+  return {
+    p: [r * Math.sin(v) * Math.cos(u), 1.56 + r * Math.cos(v) * 1.15, r * Math.sin(v) * Math.sin(u)],
+    c: [0.78 + J(0.05), 0.6 + J(0.05), 0.48 + J(0.04)],
+  };
+});
+
+const nActor = actorBase.length / 3;
+const nTotal = room.count + nActor;
+document.getElementById('count').textContent = nTotal.toLocaleString('en-US');
+
+// ---------- Walk path (ellipse through the free area of the room) ----------
+const F = 240;
+function pathAt(f) {
+  const th = (f / F) * Math.PI * 2;
+  return {
+    x: -0.4 + 2.0 * Math.sin(th),
+    z: -0.1 + 1.35 * Math.cos(th),
+    yaw: Math.atan2(2.0 * Math.cos(th), -1.35 * Math.sin(th)),
+    bob: 0.035 * Math.sin(th * 22),
+  };
+}
+
+// ---------- Combined geometry ----------
+const positions = new Float32Array(nTotal * 3);
+positions.set(room.positions, 0);
+const natural = new Float32Array(nTotal * 3);
+natural.set(room.colors, 0);
+natural.set(actorColor, room.count * 3);
+
+// Displacement-coloring palette: static -> cold, moving -> hot (per thesis Fig. "emergent partition")
+const heat = new Float32Array(nTotal * 3);
+for (let i = 0; i < room.count; i++) {
+  heat[3 * i] = 0.16; heat[3 * i + 1] = 0.23; heat[3 * i + 2] = 0.36;
+}
+for (let i = room.count; i < nTotal; i++) {
+  const y = actorBase[(i - room.count) * 3 + 1] / 1.7; // hotter toward the fast-swinging top
+  heat[3 * i] = 0.95; heat[3 * i + 1] = 0.45 - 0.25 * y; heat[3 * i + 2] = 0.12;
+}
+
+const geo = new THREE.BufferGeometry();
+geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+// display copy — `natural` and `heat` stay pristine so the toggle can swap freely
+geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(natural), 3));
+
+const material = new THREE.ShaderMaterial({
+  uniforms: { uViewportH: { value: innerHeight } },
+  vertexColors: true,
+  vertexShader: /* glsl */`
+    varying vec3 vColor;
+    uniform float uViewportH;
+    void main() {
+      vColor = color;
+      vec4 mv = modelViewMatrix * vec4(position, 1.0);
+      gl_PointSize = clamp((uViewportH * 0.020) * (10.0 / -mv.z), 1.0, 40.0);
+      gl_Position = projectionMatrix * mv;
+    }`,
+  fragmentShader: /* glsl */`
+    varying vec3 vColor;
+    void main() {
+      vec2 c = gl_PointCoord - 0.5;
+      float a = exp(-4.0 * dot(c, c) * 4.0);
+      if (a < 0.30) discard;
+      gl_FragColor = vec4(vColor, 1.0);
+    }`,
+});
+scene.add(new THREE.Points(geo, material));
+
+function setActor(f) {
+  const { x, z, yaw, bob } = pathAt(f);
+  const cy = Math.cos(yaw), sy = Math.sin(yaw);
+  for (let i = 0; i < nActor; i++) {
+    const bx = actorBase[3 * i], by = actorBase[3 * i + 1], bz = actorBase[3 * i + 2];
+    const o = (room.count + i) * 3;
+    positions[o] = x + bx * cy + bz * sy;
+    positions[o + 1] = by + bob;
+    positions[o + 2] = z - bx * sy + bz * cy;
+  }
+  geo.attributes.position.needsUpdate = true;
+}
+setActor(0);
+
+// ---------- Sampled splat trajectories (1-to-1 correspondence across time) ----------
+const trailGroup = new THREE.Group();
+trailGroup.visible = false;
+{
+  const mat = new THREE.LineBasicMaterial({ color: 0xf59e0b, transparent: true, opacity: 0.4 });
+  for (let s = 0; s < 18; s++) {
+    const idx = Math.floor(rnd() * nActor);
+    const bx = actorBase[3 * idx], by = actorBase[3 * idx + 1], bz = actorBase[3 * idx + 2];
+    const pts = [];
+    for (let f = 0; f <= F; f += 4) {
+      const { x, z, yaw, bob } = pathAt(f);
+      const cy = Math.cos(yaw), sy = Math.sin(yaw);
+      pts.push(new THREE.Vector3(x + bx * cy + bz * sy, by + bob, z - bx * sy + bz * cy));
+    }
+    trailGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), mat));
+  }
+}
+scene.add(trailGroup);
+
+// ---------- UI ----------
+let frame = 0, playing = true;
+const timeline = document.getElementById('timeline');
+const frameEl = document.getElementById('frame');
+const playBtn = document.getElementById('play');
+const tag = document.getElementById('tag');
+
+playBtn.onclick = () => { playing = !playing; playBtn.textContent = playing ? '⏸ pause' : '▶ play'; };
+timeline.oninput = () => { playing = false; playBtn.textContent = '▶ play'; frame = parseInt(timeline.value); setActor(frame); };
+document.getElementById('trails').onchange = (e) => (trailGroup.visible = e.target.checked);
+document.getElementById('disp').onchange = (e) => {
+  geo.attributes.color.array.set(e.target.checked ? heat : natural);
+  geo.attributes.color.needsUpdate = true;
+  tag.innerHTML = e.target.checked
+    ? 'Cumulative displacement D<sub>i</sub>: <b style="color:#f97316">moving splats</b> vs <b style="color:#60a5fa">static background</b> — no segmentation needed'
+    : 'One shared splat set — only <b>positions</b> evolve, colors stay frozen';
+};
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  material.uniforms.uViewportH.value = innerHeight;
+});
+
+let acc = 0;
+renderer.setAnimationLoop(() => {
+  if (playing) {
+    acc += 0.55;
+    if (acc >= 1) {
+      frame = (frame + Math.floor(acc)) % F;
+      acc %= 1;
+      setActor(frame);
+      timeline.value = frame;
+    }
+  }
+  frameEl.textContent = frame;
+  controls.update();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>

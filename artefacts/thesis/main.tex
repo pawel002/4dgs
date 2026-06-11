@@ -1,0 +1,76 @@
+\documentclass[english, umisi]{agh-wi}
+\titlePL{Precyzyjna rekonstrukcja 3D pomieszczeń za pomocą obrazów z wielu kamer RGB}
+\titleEN{Precise 3D Reconstruction of Indoor Environments from Multi-RGB Camera Images}
+\author{inż. Paweł Jarosz}
+\supervisor{dr Paweł Gajewski}
+\usepackage{polski}
+\usepackage[sorting=none]{biblatex}           % Spis literatury ma być tworzony na podstawie zawartości bibliograficznej bazy danych
+\usepackage{amsmath}                          % Dodatkowe środowiska matematyczne
+\usepackage{amssymb}                          % Dodatkowe symbole matematyczne
+\usepackage[polish, intoc]{nomencl}           % Definiowanie symboli
+\usepackage{graphicx}                         % Wstawianie grafik zewnętrznych
+\usepackage{xcolor}                           % Kolorowy tekst
+\usepackage{tabularx}                         % Rozszerzona wersja środowiska 'tabular'
+\usepackage{longtable}                        % Skład "długich" tabel
+\usepackage[ruled,linesnumbered]{algorithm2e} % Algorytmy w formie pseudokodu
+\usepackage{listings}                         % Formatowanie kodów źródłowych programów
+\usepackage[cache=false,newfloat]{minted}              % Formatowanie kodów źródłowych programów
+\usepackage{hyperref}                         % Obsługa adresów URL — zbędny jeżeli używasz 'biblatex'
+\usepackage{csquotes}                         % Polskie cudzysłowy — rekomendowany jeżeli używasz 'biblatex'
+ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ %  % Konfiguracja rysunków TikZ
+ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\usepackage{tikz}
+\usepackage{pgfplots}
+\usetikzlibrary{shapes.geometric,arrows.meta,decorations.pathreplacing,positioning} 
+\tikzstyle{every picture}+=[remember picture]
+\tikzstyle{na} = [baseline=-.5ex]
+ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ % Ładowanie danych bibliograficznych
+ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\addbibresource{bibliography.bib}
+ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ % Opcje konfiguracyjne pakietów
+ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ % Pakiet 'framed'
+\definecolor{shadecolor}{gray}{0.9}
+ % Pakiet 'nomencl'
+\makenomenclature 
+ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ % Definicje komend
+ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newcommand{\alert}[1]{\colorbox{red!50}{#1}}
+ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ % Twierdzenia i podobne struktury
+ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newtheorem{theorem}{Twierdzenie}
+\newtheorem{definition}{Definition}
+
+\newcounter{comment}[chapter]
+\newenvironment{comment}[1][]{\begin{shaded}\refstepcounter{comment}
+   \noindent \textbf{Uwaga~\thechapter.\thecomment. #1} \rmfamily}{\end{shaded}}
+
+% background color for codeblocks
+\definecolor{codebg}{rgb}{0.95,0.95,0.95}
+\begin{document}
+
+\frontmatter
+\maketitle
+\tableofcontents
+% \listoffigures
+% \listoftables
+% \listofalgorithms
+% \lstlistoflistings 
+% \printnomenclature
+ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\mainmatter % Część główna
+ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ % Rozdziały części głównej
+\include{tex/01_introduction}
+\include{tex/02_literature}
+\include{tex/03_research}
+\include{tex/04_conclusions}
+\backmatter
+\printbibliography 
+\end{document}

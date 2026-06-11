@@ -1,0 +1,245 @@
+/* ---------------------------------------------------------------------------
+   Custom reveal.js theme — "Splat" (dark, minimal, teal accent)
+   --------------------------------------------------------------------------- */
+
+:root {
+  --bg: #0d1117;
+  --bg-soft: rgba(255, 255, 255, 0.035);
+  --border: rgba(255, 255, 255, 0.09);
+  --text: #dbe2ea;
+  --text-dim: #8b98a9;
+  --accent: #2dd4bf;
+  --accent-warm: #f59e0b;
+  --danger: #f87171;
+  --heading: #f4f7fa;
+  --r-main-font-size: 34px;
+}
+
+.reveal-viewport { background: var(--bg); }
+
+.reveal {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Helvetica, Arial, sans-serif;
+  font-size: var(--r-main-font-size);
+  color: var(--text);
+  font-weight: 400;
+}
+
+.reveal .slides section { text-align: left; }
+
+.reveal h1, .reveal h2, .reveal h3 {
+  color: var(--heading);
+  font-weight: 650;
+  letter-spacing: -0.015em;
+  text-transform: none;
+  line-height: 1.15;
+  margin-bottom: 0.6em;
+}
+.reveal h1 { font-size: 1.9em; }
+.reveal h2 { font-size: 1.35em; }
+.reveal h3 { font-size: 1.0em; }
+
+.reveal p, .reveal li { line-height: 1.5; }
+.reveal ul { margin-left: 0.9em; }
+.reveal li { margin: 0.35em 0; }
+.reveal li::marker { color: var(--accent); }
+
+.reveal strong, .reveal b { color: var(--heading); font-weight: 600; }
+.reveal .accent { color: var(--accent); }
+.reveal .warm { color: var(--accent-warm); }
+.reveal .dim { color: var(--text-dim); }
+.reveal small, .reveal .small { font-size: 0.62em; color: var(--text-dim); }
+
+.reveal code, .reveal .mono {
+  font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  color: #a5f3eb;
+}
+
+.reveal .progress { color: var(--accent); height: 3px; }
+.reveal .controls { color: var(--accent); }
+.reveal .slide-number { background: transparent; color: var(--text-dim); font-size: 14px; }
+
+/* --- kicker: small label above slide titles ------------------------------ */
+.kicker {
+  display: block;
+  font-size: 0.5em;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.9em;
+}
+
+/* --- card grids ----------------------------------------------------------- */
+.cards { display: grid; gap: 22px; margin-top: 10px; }
+.cards.c2 { grid-template-columns: 1fr 1fr; }
+.cards.c3 { grid-template-columns: 1fr 1fr 1fr; }
+.cards.c4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+
+.card {
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 22px 26px;
+  font-size: 0.72em;
+  line-height: 1.45;
+}
+.card h3 {
+  font-size: 1.02em;
+  margin: 0 0 0.45em 0;
+  color: var(--accent);
+  font-weight: 600;
+}
+.card.warm h3 { color: var(--accent-warm); }
+.card p { margin: 0; color: var(--text); }
+.card .dim { font-size: 0.92em; }
+
+/* numbered badge inside cards */
+.badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.7em; height: 1.7em; border-radius: 50%;
+  background: rgba(45, 212, 191, 0.14);
+  color: var(--accent); font-weight: 700; font-size: 0.95em;
+  margin-right: 0.55em;
+}
+
+/* --- pipeline / flow diagram ---------------------------------------------- */
+.flow { display: flex; align-items: stretch; gap: 0; margin: 26px 0; }
+.flow .step {
+  flex: 1;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 14px;
+  text-align: center;
+  font-size: 0.6em;
+  line-height: 1.4;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.flow .step b { display: block; font-size: 1.12em; margin-bottom: 4px; }
+.flow .step .dim { font-size: 0.9em; }
+.flow .arrow {
+  align-self: center;
+  color: var(--accent);
+  font-size: 1.1em;
+  padding: 0 10px;
+  flex: 0 0 auto;
+}
+.flow .step.hot { border-color: rgba(45, 212, 191, 0.45); background: rgba(45, 212, 191, 0.07); }
+
+/* --- timeline -------------------------------------------------------------- */
+.timeline { display: flex; gap: 18px; margin-top: 30px; }
+.era {
+  flex: 1;
+  border-top: 3px solid var(--border);
+  padding-top: 16px;
+}
+.era.geo { border-top-color: #64748b; }
+.era.neural { border-top-color: var(--accent-warm); }
+.era.explicit { border-top-color: var(--accent); }
+.era h3 { font-size: 0.72em; margin-bottom: 12px; }
+.era .item { font-size: 0.58em; margin: 9px 0; color: var(--text); line-height: 1.35; }
+.era .item .yr {
+  font-family: ui-monospace, Menlo, monospace;
+  color: var(--text-dim); font-size: 0.9em; margin-right: 8px;
+}
+.era .item b { color: var(--heading); }
+
+/* --- two-column layout ----------------------------------------------------- */
+.cols { display: flex; gap: 40px; align-items: center; }
+.cols .col { flex: 1; min-width: 0; }
+.cols .col.narrow { flex: 0.8; }
+.cols .col.wide { flex: 1.25; }
+
+/* --- images ----------------------------------------------------------------- */
+.reveal img.framed {
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  max-width: 100%;
+}
+.caption { font-size: 0.5em; color: var(--text-dim); margin-top: 10px; }
+
+/* --- equation blocks --------------------------------------------------------- */
+.eqbox {
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 16px 24px;
+  font-family: "STIX Two Math", "Cambria Math", Georgia, serif;
+  font-size: 0.85em;
+  margin: 18px 0;
+  color: var(--heading);
+}
+.eqbox .dim { font-family: -apple-system, "Segoe UI", sans-serif; font-size: 0.62em; }
+
+/* --- chips ------------------------------------------------------------------- */
+.chips { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
+.chip {
+  font-size: 0.55em;
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  color: var(--text);
+}
+.chip.on { border-color: rgba(45, 212, 191, 0.5); color: var(--accent); }
+.chip.off { border-color: rgba(248, 113, 113, 0.4); color: var(--danger); }
+
+/* --- demo slides --------------------------------------------------------------- */
+section.demo h2 { margin-bottom: 0.35em; }
+.demo-frame {
+  width: 100%;
+  height: 580px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg);
+}
+.demo-label {
+  display: inline-block;
+  font-size: 0.5em;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border-radius: 6px;
+  padding: 3px 10px;
+  vertical-align: middle;
+  margin-left: 14px;
+  letter-spacing: 0.04em;
+}
+
+/* --- placeholder styling ---------------------------------------------------------- */
+.placeholder {
+  border: 1.5px dashed rgba(245, 158, 11, 0.45);
+  background: rgba(245, 158, 11, 0.05);
+  border-radius: 14px;
+  padding: 20px 26px;
+  font-size: 0.68em;
+  color: var(--text);
+}
+.placeholder .tag-wip {
+  display: inline-block;
+  font-size: 0.62em; font-weight: 700; letter-spacing: 0.1em;
+  color: var(--accent-warm);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  padding: 2px 10px; border-radius: 999px;
+  margin-bottom: 10px;
+}
+
+/* --- title slide -------------------------------------------------------------------- */
+.title-slide { text-align: center !important; }
+.title-slide .logo-card {
+  display: inline-block;
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 14px 26px;
+  margin-bottom: 44px;
+}
+.title-slide .logo-card img { height: 64px; display: block; margin: 0; }
+.title-slide h1 { font-size: 1.5em; margin-bottom: 0.4em; }
+.title-slide .subtitle { font-size: 0.65em; color: var(--text-dim); margin-bottom: 2.2em; }
+.title-slide .meta { font-size: 0.62em; color: var(--text); }
+.title-slide .meta .dim { font-size: 0.92em; }
+
+/* footer rule on every content slide */
+.reveal .slides section { padding: 10px 20px; }
