@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="pl">
 <head>
 <meta charset="utf-8" />
 <title>Dynamic tracking — frozen topology</title>
@@ -14,15 +14,15 @@
 </script>
 </head>
 <body>
-<div class="tag" id="tag">One shared splat set — only <b>positions</b> evolve, colors stay frozen</div>
-<div class="hint">drag to orbit &middot; scroll to zoom</div>
+<div class="tag" id="tag">Jeden wspólny zbiór splatów — zmieniają się tylko <b>pozycje</b>, kolory są zamrożone</div>
+<div class="hint">przeciągnij, aby obracać &middot; scroll, aby przybliżać</div>
 <div class="hud">
-  <button id="play">⏸ pause</button>
+  <button id="play">⏸ pauza</button>
   <label style="flex:2; min-width: 220px;">t <input type="range" id="timeline" min="0" max="239" step="1" value="0" style="width: 100%;" /></label>
-  <label><input type="checkbox" id="disp" /> color by displacement D<sub>i</sub></label>
-  <label><input type="checkbox" id="trails" /> splat trajectories</label>
+  <label><input type="checkbox" id="disp" /> kolor wg przemieszczenia D<sub>i</sub></label>
+  <label><input type="checkbox" id="trails" /> trajektorie splatów</label>
   <div class="spacer"></div>
-  <div>frame <span class="stat" id="frame">0</span> · |𝒢| = <span class="stat" id="count">–</span> <span style="color:#64748b">(constant)</span></div>
+  <div>klatka <span class="stat" id="frame">0</span> · |𝒢| = <span class="stat" id="count">–</span> <span style="color:#64748b">(stałe)</span></div>
 </div>
 
 <script type="module">
@@ -36,7 +36,7 @@ renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0d1117);
+scene.background = new THREE.Color(0xf5f7fa);
 
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.05, 100);
 camera.position.set(4.8, 3.6, 6.0);
@@ -95,7 +95,7 @@ actorPart(420, () => {
 
 const nActor = actorBase.length / 3;
 const nTotal = room.count + nActor;
-document.getElementById('count').textContent = nTotal.toLocaleString('en-US');
+document.getElementById('count').textContent = nTotal.toLocaleString('pl-PL');
 
 // ---------- Walk path (ellipse through the free area of the room) ----------
 const F = 240;
@@ -194,15 +194,15 @@ const frameEl = document.getElementById('frame');
 const playBtn = document.getElementById('play');
 const tag = document.getElementById('tag');
 
-playBtn.onclick = () => { playing = !playing; playBtn.textContent = playing ? '⏸ pause' : '▶ play'; };
-timeline.oninput = () => { playing = false; playBtn.textContent = '▶ play'; frame = parseInt(timeline.value); setActor(frame); };
+playBtn.onclick = () => { playing = !playing; playBtn.textContent = playing ? '⏸ pauza' : '▶ odtwórz'; };
+timeline.oninput = () => { playing = false; playBtn.textContent = '▶ odtwórz'; frame = parseInt(timeline.value); setActor(frame); };
 document.getElementById('trails').onchange = (e) => (trailGroup.visible = e.target.checked);
 document.getElementById('disp').onchange = (e) => {
   geo.attributes.color.array.set(e.target.checked ? heat : natural);
   geo.attributes.color.needsUpdate = true;
   tag.innerHTML = e.target.checked
-    ? 'Cumulative displacement D<sub>i</sub>: <b style="color:#f97316">moving splats</b> vs <b style="color:#60a5fa">static background</b> — no segmentation needed'
-    : 'One shared splat set — only <b>positions</b> evolve, colors stay frozen';
+    ? 'Skumulowane przemieszczenie D<sub>i</sub>: <b style="color:#ea580c">poruszające się splaty</b> vs <b style="color:#2563eb">statyczne tło</b> — bez segmentacji'
+    : 'Jeden wspólny zbiór splatów — zmieniają się tylko <b>pozycje</b>, kolory są zamrożone';
 };
 
 addEventListener('resize', () => {

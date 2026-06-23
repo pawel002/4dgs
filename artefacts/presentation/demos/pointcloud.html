@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="pl">
 <head>
 <meta charset="utf-8" />
 <title>Sparse cloud + camera poses</title>
@@ -14,14 +14,14 @@
 </script>
 </head>
 <body>
-<div class="tag">Sparse reconstruction: <b>point cloud</b> + recovered <b>camera poses</b> (COLMAP-style)</div>
-<div class="hint">drag to orbit &middot; scroll to zoom</div>
+<div class="tag">Rzadka rekonstrukcja: <b>chmura punktów</b> + odzyskane <b>pozy kamer</b> (styl COLMAP)</div>
+<div class="hint">przeciągnij, aby obracać &middot; scroll, aby przybliżać</div>
 <div class="hud">
-  <label><input type="checkbox" id="cams" checked /> camera frusta</label>
-  <label>point size <input type="range" id="size" min="0.3" max="2.5" step="0.05" value="0.9" /></label>
-  <label>sparsity <input type="range" id="sparsity" min="0.05" max="1" step="0.05" value="0.35" /></label>
+  <label><input type="checkbox" id="cams" checked /> ostrosłupy kamer</label>
+  <label>rozmiar punktu <input type="range" id="size" min="0.3" max="2.5" step="0.05" value="0.9" /></label>
+  <label>rzadkość <input type="range" id="sparsity" min="0.05" max="1" step="0.05" value="0.35" /></label>
   <div class="spacer"></div>
-  <div>points: <span class="stat" id="count">–</span> &nbsp;·&nbsp; cameras: <span class="stat" id="ncams">48</span></div>
+  <div>punkty: <span class="stat" id="count">–</span> &nbsp;·&nbsp; kamery: <span class="stat" id="ncams">48</span></div>
 </div>
 
 <script type="module">
@@ -35,7 +35,7 @@ renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0d1117);
+scene.background = new THREE.Color(0xf5f7fa);
 
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.05, 100);
 camera.position.set(5.4, 4.2, 6.4);
@@ -101,7 +101,7 @@ function updateCount() {
   const k = uniforms.uKeep.value;
   let n = 0;
   for (let i = 0; i < room.count; i++) if (keepMask[i] < k) n++;
-  countEl.textContent = n.toLocaleString('en-US');
+  countEl.textContent = n.toLocaleString('pl-PL');
 }
 updateCount();
 

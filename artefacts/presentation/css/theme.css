@@ -1,17 +1,17 @@
 /* ---------------------------------------------------------------------------
-   Custom reveal.js theme — "Splat" (dark, minimal, teal accent)
+   Custom reveal.js theme — "Splat" (light, minimal, teal accent)
    --------------------------------------------------------------------------- */
 
 :root {
-  --bg: #0d1117;
-  --bg-soft: rgba(255, 255, 255, 0.035);
-  --border: rgba(255, 255, 255, 0.09);
-  --text: #dbe2ea;
-  --text-dim: #8b98a9;
-  --accent: #2dd4bf;
-  --accent-warm: #f59e0b;
-  --danger: #f87171;
-  --heading: #f4f7fa;
+  --bg: #f5f7fa;
+  --bg-soft: #ffffff;
+  --border: rgba(15, 23, 42, 0.12);
+  --text: #2b3542;
+  --text-dim: #64748b;
+  --accent: #0d9488;
+  --accent-warm: #ea580c;
+  --danger: #dc2626;
+  --heading: #0f172a;
   --r-main-font-size: 34px;
 }
 
@@ -52,7 +52,7 @@
 .reveal code, .reveal .mono {
   font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
   font-size: 0.88em;
-  color: #a5f3eb;
+  color: #0f766e;
 }
 
 .reveal .progress { color: var(--accent); height: 3px; }
@@ -83,6 +83,7 @@
   padding: 22px 26px;
   font-size: 0.72em;
   line-height: 1.45;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 6px 18px rgba(15, 23, 42, 0.05);
 }
 .card h3 {
   font-size: 1.02em;
@@ -98,7 +99,7 @@
 .badge {
   display: inline-flex; align-items: center; justify-content: center;
   width: 1.7em; height: 1.7em; border-radius: 50%;
-  background: rgba(45, 212, 191, 0.14);
+  background: rgba(13, 148, 136, 0.12);
   color: var(--accent); font-weight: 700; font-size: 0.95em;
   margin-right: 0.55em;
 }
@@ -115,6 +116,7 @@
   font-size: 0.6em;
   line-height: 1.4;
   display: flex; flex-direction: column; justify-content: center;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
 }
 .flow .step b { display: block; font-size: 1.12em; margin-bottom: 4px; }
 .flow .step .dim { font-size: 0.9em; }
@@ -125,7 +127,7 @@
   padding: 0 10px;
   flex: 0 0 auto;
 }
-.flow .step.hot { border-color: rgba(45, 212, 191, 0.45); background: rgba(45, 212, 191, 0.07); }
+.flow .step.hot { border-color: rgba(13, 148, 136, 0.5); background: rgba(13, 148, 136, 0.08); }
 
 /* --- timeline -------------------------------------------------------------- */
 .timeline { display: flex; gap: 18px; margin-top: 30px; }
@@ -173,6 +175,18 @@
 }
 .eqbox .dim { font-family: -apple-system, "Segoe UI", sans-serif; font-size: 0.62em; }
 
+/* compact in-card equation box */
+.mini-eq {
+  margin-top: 12px;
+  padding: 8px 12px;
+  text-align: center;
+  background: rgba(13, 148, 136, 0.07);
+  border: 1px solid rgba(13, 148, 136, 0.22);
+  border-radius: 8px;
+  color: var(--heading);
+  font-size: 1.05em;
+}
+
 /* --- chips ------------------------------------------------------------------- */
 .chips { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 18px; }
 .chip {
@@ -183,8 +197,8 @@
   background: var(--bg-soft);
   color: var(--text);
 }
-.chip.on { border-color: rgba(45, 212, 191, 0.5); color: var(--accent); }
-.chip.off { border-color: rgba(248, 113, 113, 0.4); color: var(--danger); }
+.chip.on { border-color: rgba(13, 148, 136, 0.55); color: var(--accent); }
+.chip.off { border-color: rgba(220, 38, 38, 0.45); color: var(--danger); }
 
 /* --- demo slides --------------------------------------------------------------- */
 section.demo h2 { margin-bottom: 0.35em; }
@@ -210,8 +224,8 @@ section.demo h2 { margin-bottom: 0.35em; }
 
 /* --- placeholder styling ---------------------------------------------------------- */
 .placeholder {
-  border: 1.5px dashed rgba(245, 158, 11, 0.45);
-  background: rgba(245, 158, 11, 0.05);
+  border: 1.5px dashed rgba(234, 88, 12, 0.5);
+  background: rgba(234, 88, 12, 0.06);
   border-radius: 14px;
   padding: 20px 26px;
   font-size: 0.68em;
@@ -221,7 +235,7 @@ section.demo h2 { margin-bottom: 0.35em; }
   display: inline-block;
   font-size: 0.62em; font-weight: 700; letter-spacing: 0.1em;
   color: var(--accent-warm);
-  border: 1px solid rgba(245, 158, 11, 0.5);
+  border: 1px solid rgba(234, 88, 12, 0.55);
   padding: 2px 10px; border-radius: 999px;
   margin-bottom: 10px;
 }
@@ -231,9 +245,11 @@ section.demo h2 { margin-bottom: 0.35em; }
 .title-slide .logo-card {
   display: inline-block;
   background: #ffffff;
+  border: 1px solid var(--border);
   border-radius: 14px;
   padding: 14px 26px;
   margin-bottom: 44px;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.07);
 }
 .title-slide .logo-card img { height: 64px; display: block; margin: 0; }
 .title-slide h1 { font-size: 1.5em; margin-bottom: 0.4em; }

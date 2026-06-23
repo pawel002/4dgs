@@ -1,0 +1,47 @@
+<!-- 8 · METHOD PIPELINE -->
+<section>
+  <span class="kicker">Metoda</span>
+  <h2>Proponowany proces rekonstrukcji</h2>
+  <div class="flow">
+    <div class="step">
+      <span class="badge" style="align-self: center">1</span>
+      <b>Pozy kamer</b>
+      odzyskane np. narzędziem COLMAP z&nbsp;filmu obejmującego całe
+      pomieszczenie
+      <span class="dim">liczone raz, kamery nieruchome</span>
+    </div>
+    <div class="arrow">→</div>
+    <div class="step">
+      <span class="badge" style="align-self: center">2</span>
+      <b>Statyczne tło</b>
+      rekonstrukcja pustego pomieszczenia metodą 3DGS
+      <span class="dim">pełne dopasowanie, klatka bazowa</span>
+    </div>
+    <div class="arrow">→</div>
+    <div class="step hot">
+      <span class="badge" style="align-self: center">3</span>
+      <b>Śledzenie klatek</b>
+      iteracja po klatkach, każda zapisywana jako zbiór splatów
+      <span class="dim">topologia i&nbsp;kolory zamrożone</span>
+    </div>
+    <div class="arrow">→</div>
+    <div class="step">
+      <span class="badge" style="align-self: center">4</span>
+      <b>Wynik</b>
+      jeden plik tła + plik na każdą klatkę
+      <span class="dim">odtwarzanie 4D w&nbsp;czasie rzeczywistym</span>
+    </div>
+  </div>
+  <p style="font-size: 0.78em; margin-top: 28px">
+    Tło rekonstruowane jest <b>raz</b>, jest ono współdzielone przez całe
+    nagranie, kolejne pliki kodują
+    <b class="accent">wyłącznie to, co się zmienia</b>, koszt i&nbsp;rozmiar
+    rosną minimalnie z&nbsp;każdą klatką.
+  </p>
+  <aside class="notes">
+    ~1,5 min. Asymetryczne budżety: rekonstrukcja tła ustala topologię,
+    śledzenie propaguje tylko małe przyrosty geometryczne (~25% kosztu klatki
+    bazowej). Podkreśl: tło liczone raz, klatki kodują jedynie zmiany —
+    statyczne–dynamiczne rozdziela się bez modelu segmentacji.
+  </aside>
+</section>

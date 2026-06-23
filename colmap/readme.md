@@ -1,8 +1,32 @@
 # How to run colmap.
 
-## Installation (using conda)
+## Installation and running
 
-First you need COLMAP installed in conda env TODO.
+By default colmap is downloaded with the cuda accelerated version. To install it run:
+
+```bash
+    uv sync
+    source .venv/bin/activate
+```
+
+After activating virual environment, run the script using:
+
+```bash
+python script.py \
+    --data_dir "../data/blender-room" \
+    --output_dir "../output/blender-room"
+```
+
+The `--data_dir` folder must contain:
+
+- `images/` — the static scene images used for the reconstruction. The reference views of the dynamic cameras must be included here too (with `dynamic` in their names, e.g. `dynamic1.png` or `dynamic1/0001.png`), otherwise they get no poses and the final triangulation has nothing to work with. They must show the same scene as the other images so that SIFT can register them.
+- `dynamic-images/` — flat folder with one reference image per dynamic camera, named after the entries above (`dynamic1.png`, `dynamic2.png`, ...).
+
+Pass `--keep_temps` to keep the intermediate databases and models for inspection.
+
+## Explanation for the steps
+
+...
 
 ## Running the reconstruction
 

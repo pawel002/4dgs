@@ -1,0 +1,39 @@
+<!-- 9 · THREE CONSTRAINTS -->
+<section>
+  <span class="kicker">Metoda</span>
+  <h2>Usprawnienia</h2>
+  <div class="cards c3">
+    <div class="card">
+      <h3><span class="badge">1</span>Zamrożona topologia</h3>
+      <p>
+        Brak klonowania, dzielenia oraz przycinania po klatce zerowej, co daje
+        <b>odpowiedniość splatów 1:1</b> w&nbsp;całym nagraniu.
+      </p>
+      <div class="mini-eq">\(|\mathcal{G}_t| = |\mathcal{G}_0|\)</div>
+    </div>
+    <div class="card">
+      <h3><span class="badge">2</span>Zamrożone kolory</h3>
+      <p>
+        Współczynniki harmonik sferycznych zablokowane po klatce zerowej, więc
+        ruch
+        <b>musi</b> być wyjaśniony geometrycznie.
+      </p>
+      <div class="mini-eq">\(c_t = c_0\)</div>
+    </div>
+    <div class="card">
+      <h3><span class="badge">3</span>Warm start</h3>
+      <p>
+        <b>Predykcja stałej prędkości</b> (zmiany przemieszczenia kolejnych
+        splatów) przed każdą klatką ogranicza błąd początkowy.
+      </p>
+      <div class="mini-eq">
+        \(\mu_t \leftarrow \mu_{t-1} + (\mu_{t-1} - \mu_{t-2})\)
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    ~1,5 min. Usprawnienie 2 wprost odpowiada na tryb porażki „halucynacji
+    kolorem” ze slajdu z&nbsp;problemami. Warm start to rozwinięcie Taylora
+    pierwszego rzędu: optymalizator płaci tylko za resztę przyspieszenia.
+  </aside>
+</section>

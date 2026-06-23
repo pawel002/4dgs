@@ -1,0 +1,50 @@
+<!-- 11 · EVALUATION ENV -->
+<section class="demo">
+  <span class="kicker">Ewaluacja</span>
+  <h2>Syntetyczne pomieszczenie</h2>
+  <div class="cols" style="align-items: stretch">
+    <div
+      class="col"
+      style="
+        font-size: 0.72em;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      "
+    >
+      <ul style="margin-top: 0">
+        <li>Pełne pomieszczenie zamodelowane w&nbsp;<b>Blenderze</b></li>
+        <li>
+          <b>Matematycznie dokładne</b> parametry wewnętrzne i&nbsp;zewnętrzne
+          eksportowane przez <code>bpy</code>, oddziela błędy 3DGS od szumu SfM
+        </li>
+        <li>Idealna kamera, <b>zerowe zniekształcenia</b></li>
+      </ul>
+      <img
+        class="framed"
+        src="assets/room_layout.png"
+        style="
+          width: 78%;
+          height: auto;
+          max-height: 250px;
+          display: block;
+          margin: 16px auto 0;
+        "
+        alt="Układ pomieszczenia"
+      />
+    </div>
+    <div class="col wide">
+      <iframe
+        class="demo-frame"
+        style="height: 560px"
+        data-src="demos/trajectory.html"
+        data-preload
+      ></iframe>
+    </div>
+  </div>
+  <aside class="notes">
+    ~1,5 min. Ścieżka parametryczna: kołowa orbita xy + szybka sinusoidalna
+    oscylacja wysokości (suwak ω). Wspomnij: planowana jest też ewaluacja na
+    danych rzeczywistych — najpierw syntetyka, by wyizolować algorytm.
+  </aside>
+</section>
