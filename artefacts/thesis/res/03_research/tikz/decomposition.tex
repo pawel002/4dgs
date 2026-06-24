@@ -1,0 +1,31 @@
+\begin{tikzpicture}[
+  font=\small,
+  gpt/.style={circle, inner sep=1.6pt},
+  grad/.style={-{Latex[length=2.4mm]}, very thick},
+]
+% --- wall (static) region ---------------------------------------------------
+\draw[fill=gray!10, draw=gray!55!black, thick] (-0.4,-1.6) rectangle (3.2,1.8);
+\node[gray!55!black, anchor=north west, font=\footnotesize] at (-0.3,1.7) {static wall};
+\foreach \x/\y in {0.3/1.2, 1.0/0.4, 1.7/1.1, 2.4/-0.3, 0.7/-1.0, 2.0/0.7}{
+  \node[gpt, fill=gray!55!black] at (\x,\y) {};
+}
+\node[align=center, font=\footnotesize, fill=white, inner sep=1pt] at (1.4,-2.2)
+  {$\mathbb{E}[\nabla_{\boldsymbol{\mu}_i}\mathcal{L}]\approx\mathbf{0}$\\ primitive stays};
+
+% --- moving subject (dynamic) region ----------------------------------------
+\begin{scope}[shift={(6.4,0)}]
+  \draw[fill=red!8, draw=red!55!black, thick] (-1.0,-1.6) rectangle (1.4,1.8);
+  \node[red!55!black, anchor=north west, font=\footnotesize] at (-0.95,1.7) {moving subject};
+  % a few primitives with motion arrows
+  \foreach \x/\y in {-0.4/0.9, 0.2/0.2, 0.6/1.0, -0.2/-0.6, 0.4/-1.0}{
+    \node[gpt, fill=red!65!black] (g) at (\x,\y) {};
+    \draw[grad, red!65!black] (\x,\y) -- ($(\x,\y)+(0.6,-0.18)$);
+  }
+  \node[align=center, font=\footnotesize, fill=white, inner sep=1pt] at (0.2,-2.2)
+    {$\mathbb{E}[\nabla_{\boldsymbol{\mu}_i}\mathcal{L}]\propto-\mathbf{v}^{(i)}_t$\\ primitive moves};
+\end{scope}
+
+% --- shared label -----------------------------------------------------------
+\node[font=\footnotesize\bfseries] at (4.0,2.5) {emergent partition (no explicit mask)};
+\draw[{Latex[length=2mm]}-{Latex[length=2mm]}, black!55] (3.3,2.2) -- (4.7,2.2);
+\end{tikzpicture}

@@ -1,0 +1,35 @@
+\begin{tikzpicture}[
+  font=\small,
+  cambody/.style={draw=black!80, fill=black!75, minimum size=3mm, inner sep=0pt},
+  cone/.style={fill=blue!35, opacity=0.20},
+  edge/.style={draw=blue!55!black, very thin, dashed},
+]
+% --- the true object (ground-truth silhouette) ------------------------------
+\fill[red!55!black, opacity=0.85]
+  plot[smooth cycle, tension=0.8] coordinates {(0,0.9) (0.7,0.4) (0.55,-0.5) (0,-0.85) (-0.6,-0.45) (-0.7,0.45)};
+\node[white, font=\footnotesize\bfseries] at (0,0) {object};
+
+% --- three silhouette cones; their triple overlap is the carved hull --------
+\fill[cone] (-4,-2.2) -- (-1.05,0.95) -- (0.95,-1.05) -- cycle;
+\draw[edge] (-4,-2.2) -- (-1.05,0.95);
+\draw[edge] (-4,-2.2) -- (0.95,-1.05);
+
+\fill[cone] (4,-2.2) -- (1.05,0.95) -- (-0.95,-1.05) -- cycle;
+\draw[edge] (4,-2.2) -- (1.05,0.95);
+\draw[edge] (4,-2.2) -- (-0.95,-1.05);
+
+\fill[cone] (0,3.3) -- (-1.15,-0.6) -- (1.15,-0.6) -- cycle;
+\draw[edge] (0,3.3) -- (-1.15,-0.6);
+\draw[edge] (0,3.3) -- (1.15,-0.6);
+
+% --- cameras ----------------------------------------------------------------
+\node[cambody] at (-4,-2.2) {}; \node[font=\footnotesize, left] at (-4.1,-2.2) {cam $1$};
+\node[cambody] at ( 4,-2.2) {}; \node[font=\footnotesize, right] at (4.1,-2.2) {cam $2$};
+\node[cambody] at ( 0, 3.3) {}; \node[font=\footnotesize, above] at (0,3.45) {cam $3$};
+
+% --- annotations ------------------------------------------------------------
+\node[blue!55!black, font=\footnotesize, anchor=west] at (1.7,1.5) {silhouette cone};
+\draw[-{Latex[length=1.8mm]}, blue!55!black] (1.65,1.5) to[out=180,in=40] (0.9,0.9);
+\node[align=center, font=\footnotesize\bfseries, fill=white, inner sep=1pt] at (0,-2.6)
+  {carved visual hull $=\ \bigcap_c\,$cone$_c\ \supseteq\ $object};
+\end{tikzpicture}

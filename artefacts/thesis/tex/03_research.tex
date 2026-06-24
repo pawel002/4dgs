@@ -2,702 +2,1351 @@
 
 \section{Problem Statement}
 
-define the problem! (should be easier when the problem is already solved!)
+The objective of this work is the reconstruction of a \emph{dynamic} indoor
+environment --- a room in which a subject moves while the surrounding geometry
+stays fixed --- observed by a small set of calibrated RGB cameras, as a
+time-varying 3D~Gaussian-Splatting field that can be rendered interactively from
+an arbitrary viewpoint and at an arbitrary instant in time. The static case, in
+which a rigid scene is captured once and frozen into a single set of primitives,
+is by now mature and is used here only as a baseline and as a source of the
+background component; the contribution of this chapter is the dynamic extension
+and the supporting infrastructure around it.
 
-\newpage
+Reconstructing a moving scene is qualitatively harder than reconstructing a static
+one, and not merely because there is more data. The difficulty is that the two
+unknowns the optimizer must recover --- \emph{where} surfaces are and \emph{what}
+they look like --- become entangled the moment the scene is allowed to change
+between observations. Three coupled problems follow, and they organize the rest of
+the chapter.
 
-\section{Solution}
+\begin{enumerate}
+    \item \textbf{Temporal coherence.} A reconstruction of a moving scene must
+    represent the \emph{same} physical surface across time, displaced only by
+    motion, rather than an unrelated cloud of primitives for each frame. If the
+    per-frame solution is left unconstrained, the optimum for frame $t$ is free to
+    re-explain the observations with a completely different arrangement of
+    primitives than the optimum for frame $t-1$. The reconstruction then has no
+    notion of a trajectory: one cannot ask where a given surface point went,
+    because there is no persistent ``given surface point''. Coherence is therefore
+    not an aesthetic nicety but a precondition for every downstream use --- motion
+    analysis, re-timing, interpolation, and, as it turns out, compression.
 
-\subsection{High Level Overview}
+    \item \textbf{Separation of motion from appearance.} To a purely photometric
+    loss, a surface that moves and a surface that changes colour are
+    indistinguishable: both change the pixels. An unconstrained optimizer will
+    therefore routinely take the cheaper of the two explanations, which is usually
+    to \emph{repaint} a primitive that is already in roughly the right place rather
+    than to \emph{move} the primitive that physically travelled. The result looks
+    plausible frame by frame but is physically wrong and temporally incoherent. A
+    correct method must inject the prior that, over a short capture, the material
+    reflectance of a surface is constant and only its geometry evolves.
 
-Write about high level pipeline. Draw DIAGRAMS!!!
+    \item \textbf{Bounded cost.} The naive way to obtain a per-frame reconstruction
+    --- optimize an independent Gaussian field for every frame from scratch ---
+    duplicates the entire static background once per frame and makes both the
+    compute and the storage scale with the \emph{length} of the capture rather than
+    with the \emph{complexity of the motion}. A one-minute capture at video frame
+    rates would then require thousands of full reconstructions and store thousands
+    of copies of the same unchanging walls. A usable method must keep both costs
+    proportional to what actually moves.
+\end{enumerate}
 
-\newpage
+A fourth requirement is methodological rather than algorithmic, but it shapes the
+entire data pipeline: the input camera poses must be \emph{exact}. In a static
+capture, a small pose error merely blurs the reconstruction slightly. In a dynamic
+capture it is far more insidious, because a pose error and a genuine scene motion
+produce the \emph{same} kind of image change --- a displacement of features --- and
+are therefore statistically indistinguishable to the tracker. Pose noise would thus
+be silently absorbed into the estimated motion and would contaminate every
+measurement of how accurately the method tracks. Section~\ref{sec:data} is designed
+specifically to remove this confound at its source.
 
-\subsection{Modeling Synthetic 3D environment}
+\section{Method}
 
-Evaluating novel view synthesis techniques, such as 3DGS (and its time depended variation, which we are focusing on in this research), requires precise ground truth data to accurately measure performance metrics. While real-world datasets are valuable, they inherently introduce noisy variables like slight changes in ambient lighting or microscopic camera motion blur. Those characteristics introduce chatter which can cause inaccuracies in pose estimation caused by SfM software like COLMAP. To establish an absolute reference point and isolate the performance of the Gaussian Splatting algorithm from SfM errors, first evaluation of this research utilizes a fully synthetic 3D environment during the development phase. Designing a custom environment in a 3D suite allows for the extraction of mathematically perfect camera poses (extrinsics) and focal lengths (intrinsics). This completely bypasses the need for a physical multi-camera rig or the tedious, error-prone process of manually capturing and reconstructing a real-world room, ensuring that any artifacts in the final render are strictly the result of the Gaussian Splatting optimization process, rather than flawed input data. The data generation pipeline mainly relies on the software called \emph{Blender}. It is an open-source 3D creation suite used as the primary engine for modeling the environment, applying material properties, simulating lighting, and rendering the ground-truth images. Blender's Python API, \emph{bpy}, was utilized to automate the rendering process and export the exact camera extrinsics for each frame as well as global camera intrinsics.  
+\subsection{High-Level Overview}
+\label{sec:overview}
 
-The synthetic environment was designed to test various aspects of the Gaussian Splatting architecture. Rather than a simple geometric shape, a full room was modeled to simulate real-world occlusion, depth disparities, and complex light interactions. The room features a variety of materials and geometric complexities. Smooth, Lambertian surfaces were included to test baseline color reproduction, while areas with high-frequency textures (such as complex patterns on fabrics or wallpapers) were added to evaluate the algorithm's ability to represent fine details without excessive blurring or point-cloud bloat. Many photos were added to the walls of the room to imitate the finer amount of detail that is both present in standard rooms, as well as test the quality of reconstruction. The general layout of the room can be seen on Figure \ref{fig:room-layout}.
+The proposed system rests on a single organizing idea: \emph{split the scene into a
+static background and a dynamic foreground, and reconstruct each with the machinery
+best suited to it.} A synthetic environment is rendered in Blender, which in the
+same pass exports mathematically exact camera poses and intrinsics, so the
+Structure-from-Motion stage that a real capture would require is removed entirely.
+The background is reconstructed once as an ordinary static Gaussian field. The
+foreground is reconstructed as one Gaussian cloud per video frame by a custom
+method, \texttt{temporal-splatfacto}, which fits a single dense cloud on the first
+frame and then \emph{tracks} that one cloud through the rest of the sequence under a
+fixed primitive count and frozen appearance. A dedicated real-time renderer
+recombines the per-frame foreground clouds with the static background, and a
+temporal compressor exploits the redundancy of the per-frame sequence to shrink it
+by an order of magnitude. The end-to-end flow is shown in
+Figure~\ref{fig:pipeline}.
+
+\begin{figure}[!ht]
+    \centering
+    \resizebox{\textwidth}{!}{\input{res/03_research/tikz/pipeline}}
+    \caption{End-to-end pipeline. Blender renders the imagery and exports exact
+    poses. The static background is reconstructed once with \textsc{splatfacto};
+    the dynamic foreground is reconstructed per frame with
+    \textsc{temporal-splatfacto} (visual-hull seed $\to$ dense frame-0 fit $\to$
+    constrained per-frame tracking). The per-frame clouds and the background are
+    recombined by the merge renderer, and the per-frame sequence is compressed in a
+    temporal-frequency basis.}
+    \label{fig:pipeline}
+\end{figure}
+
+Three design principles recur throughout and are worth stating explicitly, because
+nearly every later decision is a consequence of one of them.
+
+\paragraph{Constant topology.} After the first frame, no primitive is ever created
+or destroyed. The cardinality of the Gaussian set is fixed, $|\mathcal{G}_t| =
+|\mathcal{G}_0|$ for all $t$, and the $i$-th primitive denotes the same physical
+feature for the entire capture. This single invariant is what makes per-primitive
+velocity, trajectory extraction, and the per-attribute time-series compression of
+Section~\ref{sec:compression} even definable.
+
+\paragraph{Frozen appearance.} After the first frame, the colour of every primitive
+is held constant. Under the static--dynamic assumption the material of a surface
+does not change over a short capture, so this is physically justified, and it is
+exactly the inductive bias that forces the optimizer to explain image changes by
+\emph{motion} rather than by repainting (problem~2 above).
+
+\paragraph{Warm starts over cold restarts.} Each frame is initialized from the
+solution of the previous frame, extrapolated forward by a constant-velocity motion
+model, rather than from scratch or from the first frame. Because consecutive frames
+of a smoothly moving scene are nearly identical, the optimizer begins each frame
+already close to the answer and needs only to absorb the small residual, which is
+what keeps the per-frame cost low (problem~3).
+
+The entire pipeline is built on top of \emph{nerfstudio}. The temporal method is
+implemented as a first-class \texttt{ns-train} method, so it inherits the
+framework's data management, checkpointing, and live web viewer, while the static
+baseline uses the framework's stock \textsc{splatfacto} method. Sharing this
+substrate is itself a methodological choice: it guarantees that the static and
+dynamic reconstructions use an identical Gaussian primitive, optimizer, and
+differentiable rasterizer, so that any measured difference between them is
+attributable to the temporal method and not to an incidental difference in
+implementation.
+
+\subsection{Synthetic Data Generation}
+\label{sec:data}
+
+\subsubsection{Why Synthetic Ground Truth}
+
+Evaluating a novel-view-synthesis method requires ground-truth data precise enough
+that the residual error can be attributed to the reconstruction algorithm and not
+to the data. Real captures, however valuable for demonstrating robustness, always
+introduce confounds: ambient-light flicker between frames, rolling-shutter skew on
+moving content, lens distortion, sensor noise, motion blur, and --- most damaging
+for a tracking study --- uncertainty in the recovered camera poses. Each of these
+adds error that is difficult to disentangle from the quantity actually under study.
+A fully synthetic environment removes them by construction. Lighting is
+deterministic and repeatable; the virtual camera is a perfect pinhole with no
+distortion; there is no sensor noise unless it is deliberately added; and, crucially,
+the camera poses are not \emph{estimated} but \emph{known}, because they are read
+directly from the scene that generated the images. The development and quantitative
+evaluation of this work therefore use a synthetic room authored in \emph{Blender},
+an open-source 3D creation suite, driven through its Python API, \emph{bpy}, which
+renders the ground-truth imagery and exports the exact extrinsics and intrinsics in
+the same automated pass.
+
+\subsubsection{The Synthetic Room}
+
+Rather than an isolated object on an empty background --- which would exercise none
+of the difficulties of a real interior --- a complete furnished room was modelled,
+so as to reproduce genuine occlusion, depth disparity, and complex light transport.
+The room deliberately mixes surface types that stress different aspects of the
+reconstruction. Smooth, near-Lambertian surfaces (painted walls, the floor) test
+baseline colour fidelity and reveal low-frequency artifacts such as blotchy shading.
+Regions of high-frequency texture (patterned fabrics, wallpaper, a rug) test the
+optimizer's ability to allocate primitives to fine detail without either blurring it
+away or bloating the primitive count. A large number of framed photographs were hung
+on the walls, both to emulate the detail density of a real furnished room and to
+provide abundant, well-localized image features distributed over the whole interior
+rather than concentrated in a few textured patches. The overall layout is shown in
+Figure~\ref{fig:room-layout}.
 
 \begin{figure}[h]
     \begin{center}
         \includegraphics[width=0.9\linewidth]{res/03_research/blender_room/room_layout.png}
     \end{center}
-    \caption{An overview of the synthetic room, showing the general layout and lighting conditions. The ceiling and closest wall were removed for the unobstructed vision inside the room.}
+    \caption{Overview of the synthetic room. The ceiling and the nearest wall are
+    hidden to give an unobstructed view of the interior, its furniture, and the
+    wall-mounted photographs used as dense visual features.}
     \label{fig:room-layout}
 \end{figure}
 
-The camera path used for data collection is a critical component of the experimental design. A simple linear pan or a single orbital ring does not provide sufficient multi-view baseline data to reconstruct a complex room with varying depths. Therefore, a continuous, oscillating trajectory was defined to maximize spatial coverage while maintaining a consistent focal point. The trajectory follows a parametric path designed to simulate a comprehensive drone-like scan of the room. Specifically, it employs a rotational motion in $xy$ plane and a oscillatory motion in the $z$ axis. By assuming that the geometrical center of the room is in the point $(0, 0, 0)$, then the position of the camera in 3D space, $(x, y, z)$, at any given frame $t$, can be defined by the following parametric equations:
+\subsubsection{Rendering with Blender Cycles}
 
+All imagery is produced with Blender's physically based path-tracing renderer,
+\emph{Cycles}, configured for GPU compute. The export script enables the available
+NVIDIA devices through the OptiX/CUDA back-ends and renders each configured camera
+over the full timeline, writing one image per frame. Path tracing rather than a
+rasterized preview is used deliberately: it produces physically correct soft
+shadows, indirect illumination, and material response, so the ground-truth images
+contain the kind of view-dependent shading that the spherical-harmonic appearance
+model is meant to capture, rather than the flat shading a real-time engine would
+give. Because rendering is fully automated through \emph{bpy}, the entire dataset
+--- every camera, every frame --- can be regenerated deterministically from the
+scene file, which is what makes the ground truth reproducible.
+
+\subsubsection{Camera Configuration}
+\label{sec:cameras}
+
+Two camera configurations are exported from the same scene, one for each half of the
+static--dynamic decomposition.
+
+\paragraph{Background-capture trajectory.} The static background is reconstructed
+from a single camera that traverses a continuous, oscillating trajectory chosen to
+maximize spatial coverage of the room while keeping its centre in view. Placing the
+geometric centre of the room at the origin, the camera position at frame $t$ is
+given by the parametric path
 \begin{equation}
-    \begin{cases} 
-        x(t) = r_x \cdot \sin(2\pi\frac{t}{T}) \\ 
-        y(t) = r_y \cdot \cos(2\pi\frac{t}{T}) \\ 
-        z(t) = r_z \cdot \sin(\omega t)
+    \begin{cases}
+        x(t) = r_x \, \sin\!\big(2\pi \tfrac{t}{T}\big) \\
+        y(t) = r_y \, \cos\!\big(2\pi \tfrac{t}{T}\big) \\
+        z(t) = r_z \, \sin(\omega t)
     \end{cases},
+    \label{eq:traj}
 \end{equation}
+where the symbols are: $t$, the current frame index; $T$, the total number of
+frames, so that the normalized time $t/T$ runs over $[0,1]$ and the $xy$-component
+completes exactly one revolution; $r_x, r_y, r_z$, the per-axis radii setting how
+far the camera swings from the centre along each world axis; and $\omega$, an
+angular-frequency factor governing the vertical oscillation. The first two equations
+trace an ellipse in the horizontal $xy$-plane (a slow orbit around the room), while
+the third superimposes a rapid vertical bob whose frequency $\omega$ is set high
+relative to the orbital period. The motivation for this particular path is that
+neither a single horizontal orbit nor a single vertical sweep alone yields the
+\emph{wide-baseline parallax in all three dimensions} that a full 3D reconstruction
+requires: a planar orbit leaves vertical structure poorly constrained, and a single
+sweep under-samples the angular dimension. Combining a full azimuthal revolution
+with a high-frequency vertical oscillation samples each viewing direction from many
+heights and slight positional offsets, approximating a person walking around the
+room while raising and lowering the camera, and yields an approximately uniform
+distribution of viewpoints that avoids over-fitting the reconstruction to any
+densely sampled region.
 
-where $t$ represents the current frame/time step, $r(t)$ is the distance from the center of the room in the corresponding dimension, $T$ is the total number of frames (therefore $\frac{t}{T} \in [0, 1]$) and $\omega$ is a scaling factor describing the speed of oscillations in the $z$ axis. The last parameter is set to a high number to capture each viewing direction from many heights and slight positional variations. When designing this path, the focus was put on recreating a path of a person walking around the room and simultaneously moving the camera up and down. In addition, this mathematical approach guarantees a uniform distribution of viewpoints, preventing the Gaussian Splatting model from overfitting to heavily sampled regions while under-representing others.
+\paragraph{Dynamic-capture rig.} The dynamic foreground is captured by a rig of $C =
+4$ \emph{fixed} cameras placed at the corners of the room, all aimed at the acting
+volume at its centre (Figure~\ref{fig:camera-rig}). Each camera is stationary for
+the entire capture and records exactly one image per time step; the subject moves,
+the cameras do not. The motivation for this seemingly restrictive choice is that it
+is precisely what makes a 4D reconstruction well-posed from few cameras.
+\emph{Across} the four cameras, the rig supplies the multi-view parallax needed to
+triangulate a 3D cloud at any single instant --- the four corners see the subject
+from four sufficiently different directions. \emph{Across} time, the image index $t$
+of every camera gives observation $t$ of frame $t$ of the reconstruction. A single
+moving camera, by contrast, observes the moving subject from exactly one direction
+at any given instant, so at no instant does it provide the multi-view constraint
+needed to fix the subject's 3D shape; it can reconstruct a static room over time but
+not a moving subject. The fixed multi-camera rig trades the rich viewpoint coverage
+of a moving camera (which it does not need, since the subject supplies the novelty)
+for the synchronous multi-view coverage that the dynamic problem does need.
+
+\begin{figure}[!ht]
+    \centering
+    \input{res/03_research/tikz/camera_rig}
+    \caption{Top-down view of the dynamic-capture rig. Four fixed cameras
+    (\texttt{static1}--\texttt{static4}) observe a moving subject from the room
+    corners. The overlap of their view cones near the subject is the volume in which
+    all four silhouettes agree --- the region the reconstruction can constrain from
+    every side, and the basis of the visual-hull seed of Section~\ref{sec:hull}.}
+    \label{fig:camera-rig}
+\end{figure}
+
+\subsubsection{Direct Pose Export and the Pinhole Camera Model}
+\label{sec:poses}
+
+The decisive methodological choice in the data pipeline is that camera poses are
+\textbf{exported directly from Blender rather than estimated from the rendered
+images.} An earlier version of this work recovered poses with a Structure-from-Motion
+stage that extracted image features, matched them across views, and solved jointly
+for poses and a sparse point cloud. That stage was removed for the reason developed
+in the Problem Statement: in a dynamic capture, the residual error of pose estimation
+is statistically indistinguishable from genuine scene motion, so any pose noise is
+silently re-interpreted by the tracker as movement and corrupts the very quantity
+being measured. Even in the static case, Structure-from-Motion introduces an
+arbitrary global scale and gauge, requires distortion modelling, and can fail
+outright in textureless regions. Reading the poses from the source scene eliminates
+all of this at the root: the extrinsics are exact, to floating-point precision, and
+the metric scale is the modelled scale of the room.
+
+For every rendered frame the exporter records the world matrix of the active camera,
+the rigid camera-to-world transform
+\begin{equation}
+    \mathbf{M}^{\text{c2w}} =
+    \begin{bmatrix} \mathbf{R} & \mathbf{c} \\ \mathbf{0}^{\!\top} & 1 \end{bmatrix}
+    \in \mathbb{R}^{4\times4},
+    \label{eq:c2w}
+\end{equation}
+in which the rotation block $\mathbf{R}\in SO(3)$ gives the orientation of the camera
+axes in world coordinates and the translation $\mathbf{c}\in\mathbb{R}^3$ is the
+optical centre in world coordinates. The inverse, the world-to-camera transform that
+the rasterizer consumes, is
+\begin{equation}
+    \mathbf{M}^{\text{w2c}} = \big(\mathbf{M}^{\text{c2w}}\big)^{-1}
+    = \begin{bmatrix} \mathbf{R}^{\!\top} & -\mathbf{R}^{\!\top}\mathbf{c} \\ \mathbf{0}^{\!\top} & 1 \end{bmatrix},
+\end{equation}
+which maps a world point into the camera frame. For a static camera the matrix in
+Eq.~\eqref{eq:c2w} is computed once and reused for all of that camera's frames; for a
+moving camera it is re-read on every frame, so that the exported pose always
+corresponds exactly to the image that was rendered.
+
+The intrinsics follow the ideal pinhole model. Because the imagery is synthetic there
+is no lens distortion ($k_1 = k_2 = p_1 = p_2 = 0$), so the undistortion step a real
+capture would require is unnecessary, and the mapping from a camera-space point to a
+pixel is the linear projection through the intrinsic matrix
+\begin{equation}
+    \mathbf{K} =
+    \begin{bmatrix} f_x & 0 & c_x \\ 0 & f_y & c_y \\ 0 & 0 & 1 \end{bmatrix}.
+\end{equation}
+Here $f_x, f_y$ are the focal lengths expressed in pixels and $(c_x, c_y)$ is the
+principal point, the pixel at which the optical axis pierces the image plane. These
+are derived from the physical sensor model of the virtual camera: given a focal
+length $f$ in millimetres, a sensor width $s_w$ (the dimension the sensor is fit to
+under a horizontal fit), and a rendered resolution of $w \times h$ pixels,
+\begin{equation}
+    f_x = \frac{f}{s_w}\, w, \qquad f_y = f_x\,\frac{a_x}{a_y},
+    \qquad c_x = \frac{w}{2}, \qquad c_y = \frac{h}{2},
+    \label{eq:intrinsics}
+\end{equation}
+where $a_x, a_y$ are the horizontal and vertical pixel aspect ratios (both unity in
+this work) and the principal point is fixed at the geometric image centre because the
+virtual sensor is centred. The factor $f/s_w$ converts the physical focal length into
+a fraction of the sensor width, and multiplying by the pixel width $w$ converts that
+fraction into pixels. For compatibility with the Blender / instant-NGP data
+convention the exporter also records the horizontal field of view $2\arctan\!\big(w /
+2f_x\big)$, but the explicit $f_x, f_y, c_x, c_y, w, h$ are what the nerfstudio data
+parser consumes, since the field-of-view angle alone does not determine the principal
+point.
 
 \begin{figure}[!ht]
     \begin{center}
         \includegraphics[width=1.0\linewidth]{res/03_research/blender_room/room_mosaic.png}
     \end{center}
-    \caption{A 2x2 mosaic displaying four representative sample renders from the synthetic dataset.}
+    \caption{Four representative ground-truth renders from the synthetic dataset,
+    illustrating the variation in viewpoint, structural coverage, and lighting
+    produced by the camera configurations of Section~\ref{sec:cameras}.}
     \label{fig:room-mosaic}
 \end{figure}
 
-Because the data is rendered synthetically, we map Blender's virtual camera directly to a mathematically ideal pinhole camera model. This means there is zero lens distortion ($k_1, k_2, p_1, p_2 = 0$), which removes the need for image undistortion preprocessing. The mapping of 3D points in the camera coordinate system to 2D pixels on the image plane is governed by the camera intrinsic matrix, denoted as $K$. The intrinsic matrix contains the focal length and the principal point offset:
+\subsubsection{Coordinate-Frame Conventions}
+\label{sec:conventions}
 
-\begin{equation}
-    K = 
-    \begin{bmatrix} 
-        f_x & 0 & c_x \\
-        0 & f_y & c_y \\ 
-        0 & 0 & 1 
-    \end{bmatrix},
-\end{equation}
-where $f_x,f_y$ are the focal lengths expressed in pixel units, and $c_x,c_y$ represent the principal point (the optical center of the image plane), which in our synthetic setup is perfectly aligned with the center of the rendered image resolution. Once the mathematical framework for the trajectory was established and the environment rendered, a comprehensive dataset of ground-truth views was generated. Figure \ref{fig:room-mosaic} provides four representative samples from this dataset, formatted as a mosaic. These images illustrate the variation in spatial positioning, structural coverage, and simulated lighting achieved by the automated camera path. Because these renders are generated using the mathematically precise extrinsic and intrinsic parameters discussed previously, they serve as an ideal, artifact-free baseline for evaluating the reconstruction.
-
-\subsection{Initial Point Cloud Generation}
-
-While the synthetic dataset provides mathematically perfect 2D renders, the 3DGS algorithm inherently requires a 3D initialization to begin its optimization process. Specifically, 3DGS relies on a sparse 3D point cloud to instantiate the initial Gaussian primitives and accurately computed camera extrinsics for each input view. To generate this foundational data from the dataset of isolated photographs, a robust SfM pipeline is required. For this purpose I utilized COLMAP. To ensure reproducibility and prevent dependency conflicts with the subsequent PyTorch-based 3DGS framework, the COLMAP pipeline was executed within a dedicated, isolated Conda environment containing the appropriate CUDA toolkits and compiled binaries. The reconstruction was strictly limited to the sparse SfM phase, as the dense reconstruction is achieved by the generative nature of 3DGS. The SfM process was executed in three sequential stages: \textbf{Feature Extraction}, \textbf{Feature Matching}, and \textbf{Incremental Mapping}.
-
-\subsubsection{Stage 1: Feature Extraction} 
-
-The first step in the pipeline is identifying distinctive, viewpoint-invariant keypoints across all input images. COLMAP defaults to the Scale-Invariant Feature Transform (SIFT) algorithm, which detects local extrema in the image space across multiple scales and assigns a 128-dimensional descriptor vector to each point based on local image gradients. Because the dataset consists of mathematically precise synthetic renders, we can explicitly define the camera model to optimize the extraction process and prevent the software from attempting to optimize non-existent lens distortion. The extraction was executed using the following command present in Listing \ref{lst:colmap_features}.
-
-\begin{lstlisting}[language=bash, caption={Feature extraction command in COLMAP}, label={lst:colmap_features}]
-colmap feature_extractor \
-    --database_path database.db \
-    --image_path {images dir} \
-    --ImageReader.single_camera 1 \
-    --ImageReader.camera_model PINHOLE
-\end{lstlisting}
-
-\noindent
-Each parameter represent a feature that are useful for the sparse cloud reconstruction:
-
-\begin{itemize}
-    \item \texttt{--ImageReader.single\_camera 1}: This parameter enforces the constraint that all images in the dataset were captured using identical sensor parameters. This prevents COLMAP from treating each image as if it were taken by a different physical camera, significantly reducing the dimensionality of the subsequent optimization problem.
-    
-    \item \texttt{--ImageReader.camera\_model PINHOLE}: This is a critical parameter for synthetic data. Real-world lenses introduce radial and tangential distortions (which requires usage of models like OPENCV or RADIAL). Because our images are rendered via Blender's ideal virtual camera, they exhibit zero optical distortion. The PINHOLE model perfectly aligns with this, strictly enforcing a linear projection geometry.
-    
-\end{itemize}
-
-The output of this stage is an SQLite database file (database.db). At this point, the database is populated with two primary tables: one detailing the individual cameras and their intrinsic matrices, and another storing the 2D pixel coordinates and corresponding 128-dimensional SIFT descriptors for every detected keypoint in every image.
-
-\subsubsection{Stage 2: Feature Matching} 
-
-Once keypoints are extracted, the system must determine which points in one image correspond to the same physical 3D location in another image. Given the controlled nature and relatively manageable size of the synthetic dataset, an exhaustive matching strategy was employed using script in Listing \ref{lst:colmap_matcher}.
-
-\begin{lstlisting}[language=bash, caption={Feature matching command in COLMAP}, label={lst:colmap_matcher}]
-colmap exhaustive_matcher \
-    --database_path database.db
-\end{lstlisting}
-
-The exhaustive matcher compares every single image against every other image in the dataset ($O(n^2)$ complexity). For every pair of images, it computes the distance between their SIFT descriptors. However, simple descriptor matching is prone to false positives (e.g., matching identical but physically distinct textures, such as two identical patterns on different parts of the rug). Therefore, COLMAP performs geometric verification. Using the Random Sample Consensus (RANSAC) algorithm, it attempts to find a valid fundamental or essential matrix that maps the points between the two views. Matches that do not conform to this geometry are classified as outliers and discarded. After this process, the database.db is updated. A new table is populated containing the ''inlier matches'', which are the verified, geometrically consistent connections between keypoints across multiple views. These verified matches form the scene graph that connects the disparate 2D images.
-
-\subsubsection{Stage 3: Incremental Mapping} 
-
-The final stage transforms the 2D feature tracks into a 3D coordinate space, simultaneously estimating the 3D position of the points and the 6 Degree-of-Freedom pose of the cameras (three degrees for both positional $(x, y, z)$, and rotational $(\theta, \psi, \phi)$ coordinates). This mapping is performed using the script in Listing \ref{lst:colmap_mapper}.
-
-\begin{lstlisting}[language=bash, caption={Reconstruction command in COLMAP}, label={lst:colmap_mapper}]
-colmap mapper \
-    --database_path database.db \
-    --image_path {images dir} \
-    --output_path {output dir}
-\end{lstlisting}
-
-\noindent
-The incremental mapper operates through a loop:
-
-\begin{enumerate}
-    \item \textbf{Initialization:} It selects an initial pair of images that have a high number of verified matches and a sufficiently large baseline (distance between cameras) to ensure stable triangulation.
-    \item \textbf{Triangulation:} The 2D keypoints shared between these images are projected as rays into 3D space. Where these rays intersect, a 3D point is instantiated.
-    \item \textbf{Image Registration:} New images are incrementally added to the model. By identifying previously triangulated 3D points visible in the new image, COLMAP uses the Perspective-n-Point algorithm to solve for the new camera's pose.
-    \item \textbf{Bundle Adjustment:} As new points and cameras are added, mathematical drift inevitably accumulates. To combat this, COLMAP frequently runs Bundle Adjustment. It is a non-linear optimization (typically using the Levenberg-Marquardt algorithm) that simultaneously refines the 3D point coordinates and the camera poses to minimize the total reprojection error across the entire scene.
-\end{enumerate}
-
-\noindent
-The mapper outputs three critical binary files into the sparse directory, which serve as the direct input for the 3DGS pipeline:
-
-\begin{itemize}
-    \item \texttt{cameras.bin}: Contains the intrinsic parameters (which remain fixed based on our initial input).
-    \item \texttt{images.bin}: Contains the reconstructed extrinsic parameters (rotation quaternions and translation vectors) for every successfully registered frame.
-    \item \texttt{points3D.bin}: Contains the XYZ coordinates and RGB color values of the triangulated sparse point cloud.
-\end{itemize}
-
-\subsection{Point Cloud Inspection}
-\label{sec:point-cloud-inspection}
-
-To keep the full control over the rendering process of achieved point cloud, I implemented an application capable of parsing and displaying the data generated by COLMAP. This application was then further develop to support the rendering of gaussian splatting scenes (but it will be covered in the future chapter). The main use case for this step of the reconstruction pipeline was to assess the quality of COLMAP point cloud reconstruction. To achieve this, first files \texttt{images.bin} and \texttt{points3D.bin} need to be parsed and then projected to user viewing space using projection matrices. The system was implemented using C++ and follows the following rendering architecture:
-
-\begin{enumerate}
-    \item \textbf{Data Deserialization:} Extracts the point cloud geometry (3D coordinates and RGB values) and camera extrinsics (quaternions and translation vectors) are parsed directly from COLMAP's output format.
-
-    \item \textbf{Graphics Pipeline:} Application uses OpenGL as the main rendering framework. Data is uploaded to the GPU via Vertex Array Objects and Vertex Buffer Objects for hardware-accelerated rendering. The rendering of wireframes and points is handled purely by shaders written in GLSL.
-
-    \item \textbf{User Interface:} ImGui is integrated to provide a dynamic interface for loading datasets at runtime, toggling visibility states without requiring recompilation and changing some visual rendering parameters.
-\end{enumerate}
-
-To fully inspect the dataset generated by COLMAP, I have implemented a dedicated rendering application to visualize the reconstructed scene geometry as a point cloud and to display the recovered camera poses as geometric wireframe primitives. The application is built using the OpenGL 3.3 Core Profile graphics API, to achieve interactive frame rates even for large scenes containing millions of points. The rendering pipeline is organized around three foundational OpenGL object types: Vertex Buffer Objects (VBOs), Vertex Array Objects (VAOs), and shader programs compiled from GLSL (OpenGL Shading Language) source. A VBO is a GPU-resident memory buffer that stores raw vertex data including positions, colors, or any other per-vertex attributes. A VAO encapsulates the state required to interpret the contents of one or more VBOs, encoding the byte offset, stride, component count, and data type for each vertex attribute. This separation of data storage from its semantic description allows the GPU to switch between geometrically distinct objects during a frame with minimal overhead. Vertex data is uploaded to the GPU once at initialization time via \texttt{glBufferData} with the \texttt{GL\_STATIC\_DRAW} usage hint, indicating that the data is written infrequently but read many times per frame. The rendering logic is driven by programmable shader stages. The vertex shader executes once per input vertex and is responsible for transforming coordinates from object space into the homogeneous clip space required by the hardware rasterizer. The fragment shader executes once per rasterized fragment and computes the final color written to the framebuffer.
+A recurring source of subtle, hard-to-diagnose errors in multi-view pipelines is the
+disagreement between coordinate conventions used by different tools, so the
+conventions are stated here explicitly. Blender places the camera's local axes with
+$x$ pointing right, $y$ pointing up, and the optical axis along the \emph{negative}
+$z$ direction (an OpenGL-style frame); the matrix of Eq.~\eqref{eq:c2w} is exported
+in this frame. Many Structure-from-Motion and computer-vision tools instead use the
+OpenCV convention, with $x$ right, $y$ \emph{down}, and the optical axis along the
+\emph{positive} $z$ direction. The two frames differ by a flip of the $y$ and $z$
+axes, $\mathbf{R}_{\text{flip}} = \mathrm{diag}(1,-1,-1)$, as illustrated in
+Figure~\ref{fig:coord}. Because the poses here are exported in Blender's convention,
+this reconciliation is applied once, deterministically, when the dataset is loaded,
+rather than being inferred --- another error source that the direct-export pipeline
+removes, since there is no ambiguity about which convention the poses are in.
 
 \begin{figure}[!ht]
     \centering
-    \input{res/03_research/tikz/point_vbo}
-    \caption{Memory layout of the VBO and the corresponding VAO attribute bindings. Each \texttt{Point} occupies 24 bytes: the three-component position (blue) is stored at byte offset 0, and the three-component RGB color (orange) is stored at byte offset 12.}
-    \label{fig:vbo-layout}
+    \input{res/03_research/tikz/coord_frames}
+    \caption{Camera coordinate conventions. Blender (left) looks along local $-z$
+    with $y$ up; the OpenCV/SfM convention (right) looks along $+z$ with $y$ down.
+    The two differ by $\mathbf{R}_{\text{flip}} = \mathrm{diag}(1,-1,-1)$, reconciled
+    once at load time.}
+    \label{fig:coord}
 \end{figure}
 
-\subsubsection{Point Cloud Rendering}
+\subsubsection{Dataset Layout and Frame Alignment}
+\label{sec:layout}
 
-Each point in the reconstructed scene is represented by a \texttt{Point} structure composed of a three-dimensional position vector $\mathbf{p} \in \mathbb{R}^3$ and an associated RGB color vector $\mathbf{c} \in \mathbb{R}^3$. The complete point cloud is stored as a contiguous, interleaved array in a single VBO, with position data placed at byte offset 0 and color data at byte offset 12, yielding a total stride of 24 bytes per vertex. The associated VAO is configured with two vertex attribute pointers: attribute location 0 binds the three-component position, and attribute location 1 binds the three-component color. This layout is illustrated conceptually in Figure~\ref{fig:vbo-layout}. The point cloud is submitted to the rasterizer with a single draw call:
+Each camera is exported as a self-contained nerfstudio dataset: a folder containing a
+\texttt{transforms.json} with the explicit intrinsics of Eq.~\eqref{eq:intrinsics} and
+the per-frame poses of Eq.~\eqref{eq:c2w}, alongside an \texttt{images/} directory
+holding one zero-padded image per time step. The four fixed cameras therefore form
+four sibling folders that share a common frame indexing:
+\begin{verbatim}
+output/
++-- static1/  transforms.json  images/{0001..0150}.png
++-- static2/  transforms.json  images/{0001..0150}.png
++-- static3/  transforms.json  images/{0001..0150}.png
++-- static4/  transforms.json  images/{0001..0150}.png
+\end{verbatim}
+The temporal data parser discovers every camera folder whose name matches the
+configured prefix, then \emph{flattens} the per-camera sequences into a single
+time-indexed dataset usable by the optimizer. Two consistency conditions are checked
+before training begins, and both encode the synchronization assumption the method
+depends on: every camera must contribute the same number of frames, and the
+zero-padded filenames must align across cameras so that image $t$ of every camera
+genuinely corresponds to the same instant. A missing or mismatched frame is treated
+as a fatal error rather than silently skipped, because an asynchronous frame would
+appear to the tracker as a sudden, physically impossible jump of the entire subject
+--- exactly the kind of spurious motion the method cannot and should not try to
+explain. The four exact poses and the aligned, time-indexed image set are the only
+inputs to the reconstruction; no point cloud and no pose estimate are required.
+
+\subsection{Static--Dynamic Scene Decomposition}
+\label{sec:decomposition}
+
+The organizing principle introduced in Section~\ref{sec:overview} is now made
+precise. Writing $\mathcal{G}_t$ for the set of Gaussians representing the scene at
+time $t$, the model assumes the scene decomposes as the disjoint union of a static
+and a dynamic component,
 \begin{equation}
-    \texttt{glDrawArrays(GL\_POINTS, 0, N)}
+    \mathcal{G}_t = \mathcal{G}^{\text{static}} \;\sqcup\; \mathcal{G}^{\text{dynamic}}_t,
 \end{equation}
-where $N$ denotes the total number of points in the scene. The \texttt{GL\_POINTS} primitive mode instructs the GPU to treat each processed vertex as an independent point primitive, rasterizing it as a square which size is controlled by the GLSL built-in \texttt{gl\_PointSize}.
-
-\subsubsection{MVP Transformation}
-
-Within the vertex shader, each point undergoes the standard Model-View-Projection (MVP) transformation. Because the reconstructed points are already expressed in world space, the model matrix degenerates to the identity $M = I_4$. The clip-space position of a point is therefore:
+subject to the temporal constraints
 \begin{equation}
-    \mathbf{v}_\text{clip} = P \cdot V \cdot \mathbf{p}_\text{world}
+    \forall t:\;\; g_i \in \mathcal{G}^{\text{static}} \Rightarrow \boldsymbol{\mu}_i(t) = \boldsymbol{\mu}_i(0),
+    \qquad
+    g_i \in \mathcal{G}^{\text{dynamic}}_t \Rightarrow \boldsymbol{\mu}_i(t) = \boldsymbol{\mu}_i(0) + \boldsymbol{\delta}_i(t),
 \end{equation}
-where $V$ is the view matrix encoding the observer's pose and $P$ is the perspective projection matrix described in Section~\ref{sec:projection}.
+where the symbol $\sqcup$ denotes a disjoint union (the two sets share no primitive)
+and $\boldsymbol{\delta}_i(t) \in \mathbb{R}^3$ is the per-primitive, per-frame
+displacement of a dynamic primitive from its rest position. In words: a static
+primitive keeps its frame-$0$ position for the whole capture, while a dynamic
+primitive is displaced from it by $\boldsymbol{\delta}_i(t)$. The static component is
+the rigid scene --- walls, floor, ceiling, furniture, stationary objects --- and is
+reconstructed once as an ordinary Gaussian field; the dynamic component is the moving
+subject and is reconstructed per frame.
 
-\subsubsection{Distance-Dependent Point Size Attenuation}
-
-A fixed screen-space point size produces visually inconsistent results across varying depths, points close to the camera appear disproportionately large while distant points collapse to sub-pixel extents. To obtain a perceptually uniform representation, the rendered size of each point is calculated as a function of its Euclidean distance from the virtual camera. Let $d$ denote the distance from the camera origin to the point in view space:
+\paragraph{Two routes to the partition.} An \emph{explicit} decomposition would first
+segment the imagery with a vision model, label each region static or dynamic, and
+reconstruct each separately. The drawback is that it couples the method's accuracy to
+that of an external segmenter, which must itself be trained, may fail on the
+deforming boundaries of a moving subject, and introduces a dependency the rest of the
+pipeline would inherit. The route taken here is instead an \emph{implicit}
+decomposition that emerges from the optimization itself, with no mask ever computed.
+A single shared cloud is fit on the first frame, and each subsequent frame is
+reconstructed by perturbing only those primitives that must move to explain the new
+observations. The mechanism is visible directly in the gradient
+(Figure~\ref{fig:decomp}): a primitive on a stationary wall projects to a pixel whose
+value does not change from frame to frame (except briefly when the subject occludes
+it), so its expected positional gradient is essentially zero,
 \begin{equation}
-    d = \left\lVert \bigl(V \cdot \mathbf{p}_\text{world}\bigr)_{xyz} \right\rVert_2
+    g_i \in \mathcal{G}^{\text{static}}:\quad \mathbb{E}\!\big[\nabla_{\boldsymbol{\mu}_i}\mathcal{L}_t\big] \approx \mathbf{0},
 \end{equation}
-The screen-space size $s$ assigned to \texttt{gl\_PointSize} is then:
+and it remains numerically stationary; a primitive on the moving subject projects to a
+pixel that changes every frame, so its expected gradient has a well-defined direction
+opposing the local error, driving it along the subject's motion,
 \begin{equation}
-    s = \mathrm{clamp}\!\left(\frac{s_\mathrm{base}}{d},\; s_\mathrm{min},\; s_\mathrm{max}\right)
+    g_i \in \mathcal{G}^{\text{dynamic}}_t:\quad \mathbb{E}\!\big[\nabla_{\boldsymbol{\mu}_i}\mathcal{L}_t\big] \;\propto\; -\,\mathbf{v}^{(i)}_t.
 \end{equation}
-where $s_\mathrm{base}$ is a user-controlled scaling constant, and $s_\mathrm{min}$, $s_\mathrm{max}$ define the permissible size range in pixels. The inverse-distance law ensures that points near the camera are rendered with a visibly largerer and that distant points converge toward a minimum size that preserves their visibility without disappearing and cluttering the scene. The fragment shader receives the color interpolated from vertex attributes and writes it directly to the framebuffer, yielding a colored point cloud representation. The resulting visualization can be seen in Figure~\ref{fig:point-cloud-vis}.
-
-\subsubsection{Camera Pose Visualization}
-
-In addition to the point cloud, each registered camera pose estimated by COLMAP is visualized as a wireframe pyramid. These primitives provide an immediate geometric cue to the spatial distribution, density, and angular coverage of the image acquisition, which is particularly useful when diagnosing reconstruction quality.
-
-\subsubsection{Frustum Geometry}
-
-The canonical frustum is defined in local camera space as a pyramid with its apex at the coordinate origin, representing the optical center, and a rectangular base approximating the image plane at depth $d$. Denoting the half-width and half-height of the base rectangle as $w$ and $h$ respectively, the five distinct vertices are:
-\begin{equation}
-    \mathbf{v}_0 = \begin{pmatrix} 0 \\ 0 \\ 0 \end{pmatrix}, \qquad
-    \mathbf{v}_{1\ldots4} = \begin{pmatrix} \pm w \\ \pm h \\ d \end{pmatrix}
-\end{equation}
-Eight line segments connect these vertices to form the wireframe: four lateral edges from the apex $\mathbf{v}_0$ to each base corner, and four edges forming the perimeter of the base rectangle. The geometry is stored as 16 ordered vertex positions in a dedicated VBO configured for the \texttt{GL\_LINES} primitive topology, in which each consecutive pair of vertices defines one line segment. The canonical frustum geometry is depicted schematically in Figure~\ref{fig:frustum-geometry}.
-
-\subsubsection{GPU Instanced Rendering}
-
-Issuing a separate draw call for each of the $K$ registered cameras would introduce significant CPU-side overhead for large datasets. Instead, GPU instanced rendering is employed, which submits the canonical frustum geometry once and draws it $K$ times in a single call:
-\begin{equation}
-    \texttt{glDrawArraysInstanced(GL\_LINES, 0, 16, K)}
-\end{equation}
-Per-camera model matrices are stored in a secondary instance VBO. Because OpenGL restricts a single vertex attribute to a maximum width of four components, each $4 \times 4$ matrix is decomposed into four consecutive \texttt{vec4} columns occupying attribute locations 2 through 5. The \texttt{glVertexAttribDivisor} function is set to 1 for all four locations, instructing the attribute fetcher to advance the instance data once per drawn instance rather than once per vertex. The vertex shader selects between the instanced model matrix and the identity model matrix via a boolean uniform \texttt{isInstanced}. The fragment shader assigns a uniform red color $\mathbf{c} = (1, 0, 0)$ to all wireframe fragments, clearly distinguishing camera pose indicators from the colored point cloud geometry.
-
-\subsubsection{Coordinate Space Transformations}
-\label{sec:transforms}
-
-COLMAP encodes camera extrinsics as the rigid-body transformation from world space to camera space. For each registered image, it provides a unit quaternion $\mathbf{q} = (q_w, q_x, q_y, q_z)$ encoding the rotation and a translation vector $\mathbf{T} \in \mathbb{R}^3$. Visualization of the frustum pyramids requires the inverse transformation, mapping from local camera space to world space.
-
-The quaternion is first converted into a $3 \times 3$ rotation matrix $R$ via the standard bilinear mapping. The camera center $\mathbf{C}$ in world space is recovered by inverting the rigid-body transformation $\mathbf{p}_\text{cam} = R\,\mathbf{p}_\text{world} + \mathbf{T}$, which gives:
-\begin{equation}
-    \mathbf{C} = -R^T \mathbf{T}
-\end{equation}
-The $4 \times 4$ model matrix $M$ that maps canonical frustum vertices from local camera space to their correct world-space positions and orientations is then:
-\begin{equation}
-    M = \begin{bmatrix}
-        R^T & \mathbf{C} \\
-        \mathbf{0}^T & 1
-    \end{bmatrix}
-\end{equation}
-
-For interactive scene navigation, a first-person fly-through camera is implemented. Its view matrix $V$ transforms all world-space coordinates into the reference frame of the virtual observer. Given the observer's world-space position $\mathbf{P}_\text{cam}$, normalized right vector $\mathbf{r}$, up vector $\mathbf{u}$, and forward direction $\mathbf{f}$, the orthonormal rotation block $R_\text{view} = \begin{bmatrix} \mathbf{r} & \mathbf{u} & -\mathbf{f} \end{bmatrix}^T$ yields:
-\begin{equation}
-    V = \begin{bmatrix}
-        R_\text{view} & -R_\text{view}\, \mathbf{P}_\text{cam} \\
-        \mathbf{0}^T & 1
-    \end{bmatrix}
-\end{equation}
-This matrix is recomputed every frame from the camera's Euler angles to reflect user input, and passed to the vertex shader as a uniform.
-
-\subsubsection{Perspective Projection}
-\label{sec:projection}
-
-To map the three-dimensional view-space geometry onto the two-dimensional framebuffer, a symmetric perspective projection matrix $P$ is applied inside the vertex shader. This matrix encodes the camera's vertical field of view and the display aspect ratio, and introduces the depth-dependent foreshortening by which objects at greater distance subtend a smaller solid angle. Given the vertical field of view $\phi$, the aspect ratio $a = w_\text{screen} / h_\text{screen}$, the near clipping plane distance $n$, and the far clipping plane distance $f$, the projection matrix is:
-
-\begin{equation}
-    P = \begin{bmatrix}
-        \dfrac{1}{a \tan(\phi/2)} & 0 & 0 & 0 \\[8pt]
-        0 & \dfrac{1}{\tan(\phi/2)} & 0 & 0 \\[8pt]
-        0 & 0 & -\dfrac{f+n}{f-n} & -\dfrac{2fn}{f-n} \\[4pt]
-        0 & 0 & -1 & 0
-    \end{bmatrix}
-\end{equation}
-
-The complete clip-space vertex position is computed by concatenating the model, view, and projection transformations:
-\begin{equation}
-    \mathbf{v}_\text{clip} = P \cdot V \cdot M \cdot \mathbf{v}_\text{local}
-\end{equation}
-
-Following the vertex shader, the GPU hardware performs the perspective divide to obtain normalized device coordinates (NDC), which are invariant with respect to the window resolution:
-\begin{equation}
-    \begin{pmatrix} x_\text{ndc} \\ y_\text{ndc} \\ z_\text{ndc} \end{pmatrix}
-    = \frac{1}{w_\text{clip}} \begin{pmatrix} x_\text{clip} \\ y_\text{clip} \\ z_\text{clip} \end{pmatrix}
-\end{equation}
-The resulting NDC coordinates lie in $[-1, 1]^3$, with the depth value $z_\text{ndc}$ used by the depth buffer to resolve visibility between overlapping primitives. A final viewport transformation maps the NDC square $[-1, 1]^2$ linearly to the pixel coordinates of the framebuffer. The full coordinate transformation chain, from local object space through to screen pixels, is summarized in Figure~\ref{fig:transform-pipeline}.
-
-The resulting rendered scene, showing the reconstructed point cloud overlaid with camera pose wireframes, can be observed in Figure~\ref{fig:point-cloud-vis}.
-
+No external label is needed: the loss landscape itself partitions the cloud. A useful
+empirical consequence is that the partition can be \emph{read off} after the fact by
+thresholding each primitive's cumulative displacement,
+$D_i = \sum_{t} \|\boldsymbol{\mu}_i(t) - \boldsymbol{\mu}_i(t-1)\|_2$, whose
+distribution over the cloud is strongly bimodal --- a tight peak near zero for the
+background and a long tail for the subject --- so a single threshold cleanly recovers
+the moving set without any segmentation having been performed.
 
 \begin{figure}[!ht]
-    \begin{center}
-        \includegraphics[width=0.95\linewidth]{res/03_research/colmap/point-cloud.png}
-    \end{center}
-    \caption{Achieved point cloud reconstruction. On the left with red camera ghosts, on the right without.}
-    \label{fig:point-cloud-vis}
+    \centering
+    \resizebox{0.9\textwidth}{!}{\input{res/03_research/tikz/decomposition}}
+    \caption{The emergent static--dynamic partition. A primitive on the static wall
+    receives a near-zero expected positional gradient and stays put; a primitive on
+    the moving subject receives a gradient aligned with $-\mathbf{v}^{(i)}_t$ and
+    migrates. The partition is a by-product of the optimization rather than an input
+    to it.}
+    \label{fig:decomp}
 \end{figure}
 
-\subsection{Static Scene Reconstruction using 3DGS}
+The two components are reconstructed independently and recombined only at render time
+(Section~\ref{sec:merge}). During the optimization of the foreground, the background
+is not present at all: the subject is fit against a black background, so the two
+components never compete for the same pixels and never interfere. This separation is
+what allows the foreground method to make the aggressive count- and colour-freezing
+assumptions of the next section without those assumptions ever being applied to the
+much larger and structurally different background.
 
-With mathematically accurate camera poses and a robust sparse point cloud established, the pipeline transitions into the first learnable stage: fitting a complete 3D Gaussian Splatting representation of the static scene. This stage is responsible for converting the discrete, unstructured COLMAP output into a continuous, differentiable, and photorealistic volumetric representation. Conceptually, this stage treats the room as a rigid background and produces what will later serve as the geometric and appearance prior for the dynamic extension discussed in Section 3.2.5. For the purpose of this work, the static reconstruction also serves a second role: it is a controlled baseline against which the proposed video-based method is compared, since both methods share the same underlying Gaussian primitive, optimization machinery, and renderer.
-The static reconstruction pipeline can be decomposed into four sequential stages: \textbf{(1) primitive instantiation} from the sparse point cloud, \textbf{(2) parameterization and optimizer setup}, \textbf{(3) iterative optimization with adaptive density control}, and \textbf{(4) serialization of the trained model}. Each stage is described in detail in the subsections below.
+\subsection{Reconstructing the Temporal Gaussian Field}
+\label{sec:temporal}
 
-\subsubsection{Stage 1: Primitive Instantiation from the Sparse Point Cloud}
+\subsubsection{Overview of the Fitting Procedure}
 
-The optimization process cannot start from a uniform or random distribution of Gaussians, as 3DGS is highly sensitive to initialization. A poor initialization typically leads to an excessive amount of floaters, a prolonged densification period, or outright divergence, especially for large indoor scenes with many textureless regions. Instead, the algorithm is seeded from the sparse point cloud produced by COLMAP, where every surviving SfM point is promoted into a full 3D Gaussian primitive. Given a point cloud $\mathcal{P} = \{(\mathbf{x}_i, \mathbf{c}_i)\}_{i=1}^{N}$, where $\mathbf{x}_i \in \mathbb{R}^3$ is the triangulated 3D position and $\mathbf{c}_i \in [0, 1]^3$ is its mean observed RGB color, each Gaussian primitive $g_i = (\boldsymbol{\mu}_i, s_i, q_i, \sigma_i, \text{SH}_i)$ is initialized as follows:
+The dynamic foreground is reconstructed by \texttt{temporal-splatfacto}, whose
+complete procedure is given in Algorithm~\ref{alg:temporal}. The remainder of this
+section explains and motivates each of its parts in turn: the visual-hull seed
+(line~1), the single monotonic step schedule that interleaves an initial block with
+one tracking block per frame (the loop structure), the constant-count, frozen-colour
+tracking regime (lines~9--12), and the velocity prediction and frustum snap applied
+at each frame transition (lines~6--8, detailed in Section~\ref{sec:velocity}). The
+defining feature of the procedure is that it is \emph{not} a loop of independent
+reconstructions but a single, continuous optimization whose behaviour changes as the
+global step crosses frame boundaries.
 
+\begin{algorithm}[H]
+\SetAlgoLined
+\KwIn{aligned multi-view frames $\{I_{c,t}\}$, camera poses $\{\mathbf{M}_c\}$,
+      initial budget $N_0$, tracking budget $N_t$, frame count $F$}
+\KwOut{per-frame Gaussian clouds $\{\mathcal{G}_t\}_{t=0}^{F-1}$}
+$\mathcal{G} \gets \textsc{CarveVisualHull}(\{I_{c,0}\}, \{\mathbf{M}_c\})$ \tcp*{seed inside the object (Alg.~\ref{alg:carve})}
+$\boldsymbol{\mu}_{-1}, \boldsymbol{\mu}_{-2} \gets \varnothing$ \tcp*{velocity history}
+\For{$t \gets 0$ \KwTo $F-1$}{
+    point every camera at its frame-$t$ image\;
+    \eIf{$t = 0$}{
+        $B \gets N_0$; enable densification \& pruning\;
+    }{
+        \If{$t \ge 2$}{$\boldsymbol{\mu} \gets \boldsymbol{\mu} + (\boldsymbol{\mu}_{-1} - \boldsymbol{\mu}_{-2})$ \tcp*{velocity prediction, Eq.~\eqref{eq:velocity}}}
+        $\mathcal{G} \gets \textsc{SnapStraysToHull}(\mathcal{G}, \{I_{c,t}\})$ \tcp*{frustum clamp (Alg.~\ref{alg:snap})}
+        $B \gets N_t$; disable densification; colours frozen\;
+    }
+    \For{step $\gets 1$ \KwTo $B$}{
+        sample a camera $c$; render $\hat I_{c,t}$ via Eq.~\eqref{eq:alphablend}\;
+        $\mathcal{L} \gets \mathcal{L}_{\text{photo}} + \mathcal{L}_{\text{sil}}$ on the object mask\;
+        backpropagate; take one Adam step on the trainable parameters $\Theta_{\text{track}}$\;
+    }
+    \If{$t = 0$}{freeze the primitive count and the SH colours \tcp*{constant topology hereafter}}
+    $\mathcal{G}_t \gets \mathcal{G}$; \quad $\boldsymbol{\mu}_{-2}\gets\boldsymbol{\mu}_{-1}$; \quad $\boldsymbol{\mu}_{-1}\gets\boldsymbol{\mu}$\;
+}
+\caption{Temporal Gaussian fitting (\texttt{temporal-splatfacto}).}
+\label{alg:temporal}
+\end{algorithm}
+
+Concretely, training is a single, monotonically increasing sequence of optimizer
+steps, partitioned into one \emph{initial} block that reconstructs frame~$0$ and one
+fixed-size \emph{tracking} block per subsequent frame. The active frame is a pure
+function of the global step $k$, so the data parser, model, and trainer all agree on
+which frame is current without sharing any mutable state. Given $N_0$ initial
+iterations and $N_t$ tracking iterations over $F$ frames, the step-to-frame map is
+\begin{equation}
+    \mathrm{frame}(k) =
+    \begin{cases}
+        0, & k < N_0, \\[2pt]
+        \min\!\Big(1 + \big\lfloor \tfrac{k - N_0}{N_t} \big\rfloor,\; F-1\Big), & k \ge N_0,
+    \end{cases}
+    \label{eq:frameofstep}
+\end{equation}
+and, consequently, the total number of steps is \emph{determined} by the frame count
+rather than configured by hand,
+\begin{equation}
+    K_{\text{total}} = N_0 + (F-1)\,N_t .
+    \label{eq:ktotal}
+\end{equation}
+The schedule is illustrated in Figure~\ref{fig:schedule}.
+
+\begin{figure}[!ht]
+    \centering
+    \resizebox{0.95\textwidth}{!}{\input{res/03_research/tikz/schedule}}
+    \caption{The training schedule. Frame~$0$ receives a large budget $N_0$ with
+    densification active; the primitive count is frozen at step $N_0$. Each subsequent
+    frame receives $N_t$ tracking steps with the count and colour held constant. Every
+    frame transition applies a velocity prediction followed by a frustum snap
+    (Section~\ref{sec:velocity}).}
+    \label{fig:schedule}
+\end{figure}
+
+\paragraph{Motivation for a single monotonic sequence.} Expressing the whole capture
+as one continuous step sequence, rather than as $F$ separate training runs, is what
+lets the method inherit the host framework's machinery --- a single optimizer with
+per-parameter state, the standard checkpointing, and the live viewer --- unchanged.
+It also makes the schedule self-describing: from the global step alone, every
+component can compute the current frame (Eq.~\eqref{eq:frameofstep}), whether this is
+the first or last step of that frame (used to trigger per-frame setup and saving), and
+the local step within the frame (used to schedule learning rates). The price is only
+that the optimizer's momentum carries across frame boundaries, which is in fact
+desirable: a smoothly moving subject induces smoothly varying gradients, so momentum
+accumulated on one frame is a reasonable prior for the next.
+
+\subsubsection{Visual-Hull Initialization}
+\label{sec:hull}
+
+\paragraph{Motivation.} 3D Gaussian Splatting is notoriously sensitive to
+initialization; a poor seed leads to floaters, a prolonged densification phase, or
+outright divergence. The standard remedy is to seed from a Structure-from-Motion
+point cloud, but that is exactly the dependency this work removed. Two seed-free
+alternatives exist: a random cloud in a bounding box, or a geometry-aware seed derived
+from the images. A random box wastes most of its primitives outside the object, which
+the optimizer must then spend iterations culling, and it provides no colour prior. The
+key observation here is that the subject is rendered against a black background, so the
+object's \emph{silhouette} in each camera is trivially available by thresholding
+brightness --- and the intersection of the silhouette cones from several cameras, the
+classical \emph{visual hull}, is a tight, bounded volume that already hugs the object
+from every side. Seeding inside this hull places primitives where they are needed from
+the very first iteration, with no stray background primitives to cull later, and is
+the geometry-aware initialization the method uses (Algorithm~\ref{alg:carve}).
+
+\begin{algorithm}[H]
+\SetAlgoLined
+\KwIn{frame-$0$ images $\{I_c\}_{c=1}^{C}$, poses $\{\mathbf{M}_c\}$, grid resolution
+      $R$, brightness threshold $\tau_b$, view fraction $\rho$}
+\KwOut{seed points $\mathcal{H}$ with colours}
+build a voxel grid of $R^3$ centres over a cube spanning the cameras\;
+\ForEach{camera $c$}{
+    $\mathcal{M}_c \gets [\,\bar I_c > \tau_b\,]$ \tcp*{brightness foreground mask}
+    optionally dilate $\mathcal{M}_c$ by a few pixels\;
+}
+\ForEach{voxel centre $\mathbf{x}$}{
+    $n(\mathbf{x}) \gets \sum_{c} \mathcal{M}_c\big(\pi(\mathbf{K}_c\mathbf{M}_c^{\text{w2c}}\mathbf{x})\big)$ \tcp*{\# cameras seeing it as foreground}
+}
+$\mathcal{H} \gets \{\mathbf{x} : n(\mathbf{x}) \ge \rho\,C\}$ \tcp*{silhouette intersection}
+colour each $\mathbf{x}\in\mathcal{H}$ by its mean projected image sample\;
+subsample $\mathcal{H}$ to the point budget if necessary\;
+\caption{Visual-hull carving (\textsc{CarveVisualHull}).}
+\label{alg:carve}
+\end{algorithm}
+
+A voxel grid of resolution $R^3$ (default $R = 192$) is laid over a cube centred on
+the cameras. Each frame-$0$ image is converted to a foreground mask by thresholding
+its per-pixel brightness,
+\begin{equation}
+    \mathcal{M}_c(\mathbf{u}) = \big[\,\bar I_c(\mathbf{u}) > \tau_b\,\big],
+    \qquad \bar I_c(\mathbf{u}) = \tfrac{1}{3}\textstyle\sum_{k} I_{c,k}(\mathbf{u}),
+\end{equation}
+where $\bar I_c(\mathbf{u})$ is the mean of the three colour channels at pixel
+$\mathbf{u}$, $\tau_b = 0.05$ is the brightness threshold separating the lit subject
+from the black background, and the bracket is the Iverson bracket (one when the
+predicate holds, zero otherwise). The mask is optionally dilated by a few pixels to
+be forgiving at silhouette edges, where antialiasing makes the boundary gradual. Each
+voxel centre $\mathbf{x}$ is projected into every camera through its world-to-camera
+transform and intrinsics, $\mathbf{u}_c = \pi\!\big(\mathbf{K}_c
+\mathbf{M}_c^{\text{w2c}} \mathbf{x}\big)$ where $\pi$ is the perspective divide, and
+a voxel is retained when it lands in the foreground mask of at least a fraction $\rho$
+of the cameras:
+\begin{equation}
+    \mathcal{H} = \Big\{\, \mathbf{x} \;:\; \textstyle\sum_{c=1}^{C} \mathcal{M}_c\big(\mathbf{u}_c(\mathbf{x})\big) \;\ge\; \rho\, C \,\Big\}.
+    \label{eq:hull}
+\end{equation}
+With $\rho = 1$ this is the strict intersection of all four silhouette cones
+(Figure~\ref{fig:visual-hull}); a slightly smaller $\rho$ keeps a voxel that is
+foreground in, say, three of four cameras, which tolerates mask noise and partial
+self-occlusion at the cost of a slightly looser hull. The surviving voxels --- each
+coloured by the mean of its projected image samples via Eq.~\eqref{eq:sh2rgb}, and
+subsampled to a budget if there are too many --- seed the Gaussians through
+nerfstudio's standard seed-point interface. Because $\mathcal{H}$ is an
+\emph{intersection} of exact silhouette cones rather than a loose bounding box, it
+bounds the object volume directly; this is precisely the property that makes it a far
+better seed than a random cube, and the reason the hull is preferred over a
+``large box, then prune'' strategy that would spend many early iterations discarding
+primitives that the hull never creates.
+
+\begin{figure}[!ht]
+    \centering
+    \input{res/03_research/tikz/visual_hull}
+    \caption{Visual-hull carving (shown in 2D for three cameras). Each camera
+    contributes a silhouette cone; the carved hull is their intersection, a tight
+    superset of the object. The translucent overlap darkens toward the centre, where
+    all cones agree.}
+    \label{fig:visual-hull}
+\end{figure}
+
+\subsubsection{Frame 0: Dense Reconstruction}
+\label{sec:frame0}
+
+The first frame is reconstructed by the full Gaussian-Splatting optimizer, with
+adaptive density control active, for $N_0$ iterations starting from the hull seed.
+This stage plays two roles. The obvious one is to produce a high-quality
+reconstruction of the subject in its frame-$0$ pose. The less obvious but more
+important one is that it \emph{fixes the primitive count for the rest of the video}:
+densification and pruning are hard-stopped at step $N_0$, after which $|\mathcal{G}_t|
+= |\mathcal{G}_0|$ for all $t \ge 0$. Densification must be allowed here, because the
+hull seed is only a coarse volumetric occupancy and the optimizer needs the freedom
+to add primitives where fine detail demands them and to remove primitives the hull
+over-included; but it must also be stopped cleanly, because every later frame relies
+on the count being constant. The photometric objective is the standard
+Gaussian-Splatting loss, a convex combination of an $L_1$ term and a
+structural-similarity term,
+\begin{equation}
+    \mathcal{L}_{\text{photo}} = (1 - \lambda)\,\mathcal{L}_1(\hat I, I)
+    + \lambda \big(1 - \mathrm{SSIM}(\hat I, I)\big), \qquad \lambda = 0.2,
+    \label{eq:photo}
+\end{equation}
+where $\mathcal{L}_1(\hat I, I) = \frac{1}{|\Omega|}\sum_{\mathbf{p}\in\Omega}
+\|\hat I(\mathbf{p}) - I(\mathbf{p})\|_1$ is the mean absolute pixel error over the
+image domain $\Omega$, $\mathrm{SSIM}$ is the structural-similarity index comparing
+local means, variances, and covariance of the two images through a small Gaussian
+window, and $\lambda = 0.2$ balances the two. The $L_1$ term drives pixel-accurate
+colour, while the SSIM term enforces local structural agreement and prevents the
+optimizer from smearing a few oversized primitives across the image. As detailed in
+Section~\ref{sec:masking}, this loss is in fact restricted to the object region; the
+training background is black so that empty image regions cost nothing. At the end of
+this stage the cloud is a dense, well-localized reconstruction of the subject with a
+primitive count that will never change again.
+
+\subsubsection{Tracking Frames}
+\label{sec:tracking}
+
+Each subsequent frame is reconstructed by re-running the optimizer against the
+\emph{same} primitives for $N_t$ steps, under three constraints that together turn the
+problem from reconstruction into tracking. The constraints are not independent
+conveniences; each addresses a specific failure mode of unconstrained per-frame
+fitting.
+
+\paragraph{Constant count (motivation: correspondence).} Densification and pruning are
+disabled and the periodic opacity reset is skipped, so the primitive set is conserved
+exactly across the frame. The motivation is correspondence: only if the count is fixed
+and no primitive is created or destroyed does the index $i$ refer to the same physical
+feature in frame $t$ as in frame $t-1$. That one-to-one correspondence is what makes
+velocity estimation (Section~\ref{sec:velocity}), trajectory analysis, and the
+per-attribute temporal compression (Section~\ref{sec:compression}) well-defined; a
+varying count would break all three. Skipping opacity reset matters for the same
+reason --- the primitives are already well placed, and resetting their opacity would
+discard hard-won information and inject a transient artifact at every frame boundary.
+
+\paragraph{Frozen colour (motivation: motion, not repainting).} The
+spherical-harmonic coefficients --- both the diffuse term $\mathrm{SH}^{(0)}$ and all
+higher bands $\mathrm{SH}^{(1..L)}$ --- are frozen after frame~$0$: their learning
+rates are set to zero and their gradient tracking is disabled. The trainable parameter
+set during tracking is therefore restricted to geometry and opacity,
+\begin{equation}
+    \Theta_{\text{track}} = \{\boldsymbol{\mu}_i, \mathbf{s}_i, \mathbf{q}_i, \tilde\sigma_i\}_{i=1}^{N},
+    \qquad
+    \Theta_{\text{frozen}} = \{\mathrm{SH}^{(0)}_i, \mathrm{SH}^{(1..L)}_i\}_{i=1}^{N},
+    \label{eq:trackparams}
+\end{equation}
+so that for every tracking step the frozen parameters satisfy
+$\boldsymbol{\theta}_t = \boldsymbol{\theta}_0$ while the trainable ones follow the
+usual gradient update. The motivation is the appearance--motion entanglement of
+problem~2: if the optimizer were free to edit colour during tracking, the cheapest way
+to lower the loss when the subject moves would often be to \emph{repaint} a stationary
+primitive in the new colour, leaving it geometrically wrong but photometrically
+correct for that frame. Freezing colour removes that option entirely. With appearance
+and population both fixed, the only remaining way to reduce the loss is to \emph{move
+and reshape} the primitives, so tracking is forced to align them to the subject's
+actual motion. This was verified empirically: across frames the colour tensors are
+bit-identical while the means continue to move, confirming that no appearance editing
+is occurring. Opacity is deliberately left trainable, for reasons taken up in
+Section~\ref{sec:masking}.
+
+\paragraph{Per-phase learning rate (motivation: sustained mobility).} The positional
+learning rate is scheduled differently in the two phases. During frame~$0$ it follows
+the usual exponential decay from $\eta_{\text{init}}$ to $\eta_{\text{final}}$, which
+is appropriate for converging a single static reconstruction. During tracking it is
+held \emph{constant} at $\eta_{\text{track}}$. The motivation is that a single global
+decay schedule, of the kind a static run uses, would shrink the learning rate toward
+zero by the late frames and effectively freeze the motion just when the subject is
+still moving; the reconstruction would lock up partway through the sequence. A
+constant tracking rate keeps every frame, early or late, equally able to follow the
+motion. The scale, rotation, and opacity learning rates are likewise kept at their
+tracking values, and the image resolution is held at full scale for every frame so
+that all frames are fit under identical conditions.
+
+The tracking budget $N_t$ is set to a small fraction of $N_0$. This is only
+affordable because of the velocity prediction of the next section, which ensures that
+each tracking frame begins already close to its solution; the budget therefore has to
+cover only the small residual rather than the full motion arc.
+
+\subsubsection{Foreground Masking and Silhouette Supervision}
+\label{sec:masking}
+
+\paragraph{The failure mode.} A subtle but destructive problem appears if the loss is
+computed naively over the entire image. With a black background, a stationary black
+region is matched at essentially zero cost regardless of what the primitives do
+nearby, so there is \emph{no force pinning primitives to the silhouette}. Worse, a
+bright primitive that drifts a little into the background renders brightly on black,
+incurs a large error there, and the cheapest way for the optimizer to reduce that
+error is not to move it back but to drive its opacity to near zero. It then becomes an
+invisible ``dead'' primitive that no longer contributes to any image --- yet the
+per-frame velocity prediction (Section~\ref{sec:velocity}) keeps pushing it, so it
+accumulates in empty space. Over a sequence the foreground slowly erodes as primitives
+leak away, while faint background splats proliferate. The naive full-image loss thus
+not only fails to prevent drift, it actively rewards it.
+
+\paragraph{The fix: mask the loss and supervise the silhouette.} The remedy is to
+restrict the photometric loss to the object and to add an explicit constraint on the
+rendered silhouette. Let $\mathcal{M}$ be the brightness mask of the ground-truth
+frame (the same construction as in the hull carving) and let $\hat A$ be the rendered
+\emph{accumulation} image, the per-pixel sum of alpha contributions, which is the
+rendered opacity or coverage at that pixel. The photometric loss of
+Eq.~\eqref{eq:photo} is masked to the object,
+\begin{equation}
+    \mathcal{L}_{\text{photo}} = (1-\lambda)\,\big\| (\hat I - I)\odot \mathcal{M} \big\|_1
+    + \lambda\,\big(1 - \mathrm{SSIM}(\hat I \odot \mathcal{M},\, I \odot \mathcal{M})\big),
+\end{equation}
+where $\odot$ is the element-wise (Hadamard) product, so that only object pixels
+contribute. An explicit silhouette term then pushes the rendered opacity to zero
+clearly outside the object and gently toward one inside it,
+\begin{equation}
+    \mathcal{L}_{\text{sil}}
+    = \lambda_{\text{out}} \big\| \hat A \odot (1 - \mathcal{M}^{+}) \big\|_1
+    + \lambda_{\text{in}} \big\| (1 - \hat A) \odot \mathcal{M}^{-} \big\|_1 ,
+    \label{eq:sil}
+\end{equation}
+where $\mathcal{M}^{+}$ is the mask dilated by a few pixels (its morphological
+expansion) and $\mathcal{M}^{-}$ its erosion (its morphological contraction). The
+first term penalizes any rendered opacity in the region clearly outside the object,
+$1 - \mathcal{M}^{+}$, directly punishing a primitive that strays into the background;
+the second gently encourages full opacity in the eroded object core,
+$\mathcal{M}^{-}$, keeping the subject solid. The band between the erosion and the
+dilation, $\mathcal{M}^{+}\setminus\mathcal{M}^{-}$, is a deliberate ``don't-care''
+zone around the true boundary in which opacity is neither pushed to zero nor to one,
+so that the soft tails of primitives at the genuine silhouette edge are not fought.
+The total objective is $\mathcal{L} = \mathcal{L}_{\text{photo}} +
+\mathcal{L}_{\text{sil}}$, with default weights $\lambda_{\text{out}} = 1.0$ and
+$\lambda_{\text{in}} = 0.1$; the outside term is weighted an order of magnitude more
+strongly than the inside term because preventing background drift is the primary
+objective, while keeping the core solid is a mild regularizer.
+
+\paragraph{Why opacity must stay trainable.} This silhouette mechanism is also the
+reason opacity is \emph{not} frozen during tracking, despite the count- and
+colour-freezing philosophy. The masked photometric loss, by construction, gives no
+pull-back signal to a primitive that has strayed into the background. Its only
+remaining way to stop hurting the image is to fade out, and the outside term of
+Eq.~\eqref{eq:sil} is precisely what drives that fade. If opacity were frozen, a
+primitive pushed into the background would have neither a photometric pull-back nor
+the ability to fade, and would simply remain bright and opaque off-object --- the
+worst of both worlds. The measurements in Section~\ref{sec:results-masking} confirm
+this: additionally freezing opacity makes background leakage markedly worse, so colour
+and count are held constant while opacity is left free.
+
+\subsection{Point-Cloud Velocity and Frustum Clamping}
+\label{sec:velocity}
+
+\subsubsection{Linear Velocity Prediction}
+
+\paragraph{Motivation.} Consecutive frames of a smoothly moving scene are nearly
+identical, so initializing each tracking frame from scratch, or even from the
+frame-$0$ solution, wastes the budget re-traversing motion the optimizer has already
+solved on previous frames. A scene that moves smoothly is, however, also
+\emph{predictable} to first order: the displacement between the two previous frames is
+a good estimate of the displacement to the next. Exploiting this turns each frame's
+starting point from ``the previous frame'' into ``a forward extrapolation of the
+previous motion'', which is much closer to the answer.
+
+Let $\boldsymbol{\mu}^{(i)}_t$ denote the converged position of primitive $i$ at frame
+$t$. Assuming a constant inter-frame time step (taken as unity), the backward
+finite-difference estimate of the velocity at frame $t-1$ is
+\begin{equation}
+    \mathbf{v}^{(i)}_{t-1} = \boldsymbol{\mu}^{(i)}_{t-1} - \boldsymbol{\mu}^{(i)}_{t-2},
+\end{equation}
+and a first-order Taylor expansion of the trajectory about $t-1$ predicts the next
+position, $\boldsymbol{\mu}^{(i)}_{t} \approx \boldsymbol{\mu}^{(i)}_{t-1} +
+\mathbf{v}^{(i)}_{t-1}$. The method applies exactly this as an in-place warm start
+before tracking frame $t$ begins (Figure~\ref{fig:velocity-snap}a),
+\begin{equation}
+    \boldsymbol{\mu}^{(i)}_{t} \;\leftarrow\; \boldsymbol{\mu}^{(i)}_{t-1}
+    + \big( \boldsymbol{\mu}^{(i)}_{t-1} - \boldsymbol{\mu}^{(i)}_{t-2} \big),
+    \label{eq:velocity}
+\end{equation}
+a single tensor addition costing essentially nothing. The prediction is exact for
+constant-velocity motion. For general motion, the remaining error after the warm start
+is governed by the \emph{acceleration} rather than the velocity: a second-order
+expansion gives
+\begin{equation}
+    \big\| \boldsymbol{\mu}^{(i),\star}_{t} - \boldsymbol{\mu}^{(i)}_{t} \big\|_2
+    \;\approx\; \tfrac{1}{2}\,\big\| \mathbf{a}^{(i)}_{t-1} \big\|_2
+    \;\ll\; \big\| \mathbf{v}^{(i)}_{t-1} \big\|_2 ,
+    \label{eq:accel}
+\end{equation}
+where $\boldsymbol{\mu}^{(i),\star}_{t}$ is the true optimal position and
+$\mathbf{a}^{(i)}_{t-1}$ the local acceleration. In words: without the prediction the
+optimizer must close the full inter-frame displacement (of order $\|\mathbf{v}\|$),
+whereas with it the optimizer must close only the much smaller acceleration residual
+(of order $\|\mathbf{a}\|$). For human-scale motion at video frame rates the residual
+is typically sub-pixel, which is what justifies the small tracking budget $N_t$. The
+prediction begins at frame $t = 2$, the first frame for which two previous positions
+exist; on frames $0$ and $1$ it is inactive.
+
+\begin{figure}[!ht]
+    \centering
+    \input{res/03_research/tikz/velocity_snap}
+    \caption{(a) Linear velocity prediction extrapolates the last displacement to
+    warm-start the next frame; the optimizer then absorbs only the acceleration
+    residual to reach the true position $\boldsymbol{\mu}^{\star}_t$. (b) A primitive
+    predicted outside the silhouette intersection is snapped onto the nearest
+    hull-surface voxel, reclaiming it instead of letting it coast away.}
+    \label{fig:velocity-snap}
+\end{figure}
+
+\subsubsection{Runaway and Left-Behind Gaussians}
+
+The velocity prediction is self-correcting only while a primitive still receives a
+gradient. This caveat interacts dangerously with the masked loss of
+Section~\ref{sec:masking}, and the interaction produces two symmetric failure modes
+that, left unchecked, slowly destroy the reconstruction over a long sequence.
+
+The first is the \emph{runaway}. Suppose a primitive drifts off the subject. Because
+the photometric loss is masked to the object, off-object pixels produce no gradient,
+so the primitive fades and its position stops being corrected. Its frame-to-frame
+displacement then freezes at whatever value it last had, and since the velocity
+prediction of Eq.~\eqref{eq:velocity} simply repeats that displacement, the primitive
+coasts away in a straight line, frame after frame, never to return --- a constant
+velocity with no restoring force. The second is the \emph{left-behind} primitive: one
+that lags the moving subject, loses its gradient for the same reason, and is simply
+abandoned where it stalled. Both modes remove primitives from the subject; because the
+count is fixed, lost primitives are not replaced, and the subject degrades and thins
+out as the sequence progresses.
+
+\subsubsection{Per-Frame Hull Snapping}
+
+\paragraph{Motivation and mechanism.} Both failure modes share a root cause: a
+primitive that leaves the object is never brought back. The fix is therefore to
+re-anchor strays to the geometry at the start of every frame, before they can
+accumulate error. After the velocity warm start, the subject's visual hull is carved
+afresh for the current frame --- the same silhouette-intersection construction as
+Algorithm~\ref{alg:carve}, at a coarser grid resolution for speed --- and every
+primitive whose centre projects \emph{outside} the silhouette intersection is snapped
+onto its nearest point on the hull surface (Figure~\ref{fig:velocity-snap}b and
+Algorithm~\ref{alg:snap}):
+\begin{equation}
+    \boldsymbol{\mu}^{(i)}_t \;\leftarrow\;
+    \arg\min_{\mathbf{x}\in\partial\mathcal{H}_t} \big\| \boldsymbol{\mu}^{(i)}_t - \mathbf{x} \big\|_2
+    \qquad \text{if} \qquad
+    \textstyle\sum_{c} \mathcal{M}_{c,t}\big(\mathbf{u}_c(\boldsymbol{\mu}^{(i)}_t)\big) < \rho_s\, C ,
+    \label{eq:snap}
+\end{equation}
+where $\partial\mathcal{H}_t$ denotes the surface voxels of the frame-$t$ hull, the
+$\arg\min$ selects the nearest of them, and the condition on the right is the stray
+test: a primitive is a stray when it projects into fewer than a fraction $\rho_s$ of
+the camera masks. With $\rho_s = 1$ this is the natural ``not inside all camera
+silhouettes'' criterion, the strict reading of being outside the volume the cameras
+agree on. After a primitive is snapped, its velocity history $(\boldsymbol{\mu}_{-1},
+\boldsymbol{\mu}_{-2})$ for that primitive is reset, so that the teleport is not
+mistaken for a genuine inter-frame motion and re-extrapolated on the following frame.
+
+\begin{algorithm}[H]
+\SetAlgoLined
+\KwIn{cloud $\mathcal{G}$, frame-$t$ images $\{I_{c,t}\}$, poses $\{\mathbf{M}_c\}$,
+      stray fraction $\rho_s$}
+\KwOut{re-anchored cloud $\mathcal{G}$}
+$\mathcal{H}_t \gets \textsc{CarveVisualHull}(\{I_{c,t}\}, \{\mathbf{M}_c\})$ at coarse resolution\;
+\ForEach{primitive $i$}{
+    $n_i \gets \sum_{c} \mathcal{M}_{c,t}\big(\mathbf{u}_c(\boldsymbol{\mu}^{(i)}_t)\big)$\;
+    \If{$n_i < \rho_s\,C$}{
+        $\boldsymbol{\mu}^{(i)}_t \gets$ nearest surface voxel of $\mathcal{H}_t$\;
+        reset velocity history of primitive $i$\;
+    }
+}
+\caption{Per-frame hull snapping (\textsc{SnapStraysToHull}).}
+\label{alg:snap}
+\end{algorithm}
+
+The effect is twofold. It \emph{reclaims} runaways and left-behind primitives by
+pulling them back onto the object instead of abandoning them, and it
+\emph{re-registers} the whole cloud onto the moving subject each frame, so that a
+cloud which lagged or overshot is snapped forward onto the current silhouette. Every
+frame therefore begins with all primitives inside the object as seen from every camera
+--- a configuration from which the subsequent tracking steps can only improve, since
+they start already consistent with all four silhouettes. This is the sense in which
+the method ``clamps the point cloud to the camera frustums'': the silhouette
+intersection is the set of points consistent with every camera's frustum-bounded view
+of the object, and snapping enforces membership in it. A milder alternative, used only
+when snapping is disabled, simply zeroes a stray's velocity so it stops coasting; this
+prevents runaways but does not reclaim left-behind primitives, and is measurably
+inferior (Section~\ref{sec:results-snap}).
+
+\subsection{The Merge Rendering Pipeline}
+\label{sec:merge}
+
+The static background and the dynamic foreground are reconstructed separately, so a
+final component is needed to recombine them into a single interactive scene. This is
+the \emph{merge renderer}, built on \emph{viser}, a web-based 3D viewer with
+hardware-accelerated Gaussian rendering. It takes the per-frame foreground clouds and,
+optionally, a static background cloud exported from the baseline reconstruction, and
+composites them with full playback control. Building on viser provides the
+GPU-accelerated rendering and the browser interface without any bespoke graphics code,
+so the renderer is concerned only with marshalling the trained primitives and
+orchestrating playback.
+
+\paragraph{From stored parameters to renderable primitives.} Each cloud is stored on
+disk with the optimizer's \emph{raw, pre-activation} parameters --- the same values
+the trainer holds --- so the renderer must apply the activation functions of
+Section~\ref{sec:notation} to recover the quantities the rasterizer expects. The
+reasoning behind storing pre-activation values is that they are the unconstrained
+quantities gradient descent operates on; the activations are deferred to render time.
+The renderer therefore recovers opacity through the sigmoid and scale through the
+exponential, $\sigma_i = \mathrm{sig}(\tilde\sigma_i)$ and $\mathbf{S}_i =
+\mathrm{diag}(\exp(\mathbf{s}_i))$; normalizes the quaternion and forms the rotation,
+$\hat{\mathbf{q}}_i = \mathbf{q}_i / \|\mathbf{q}_i\|_2 \mapsto \mathbf{R}_i$; reads the
+diffuse colour from the zeroth SH band through Eq.~\eqref{eq:sh2rgb}; and assembles the
+world-space covariance through Eq.~\eqref{eq:cov}. Because the viewer represents a
+Gaussian by its centre, covariance, colour, and opacity, only the upper triangle of
+the symmetric $\boldsymbol{\Sigma}_i$ need be uploaded, packed alongside the colour and
+opacity into the per-primitive buffer the GPU consumes.
+
+\paragraph{Compositing and playback (motivation: zero-cost frame switching).} The
+central design decision concerns how frames are switched during playback. The naive
+approach --- upload the current frame's cloud, and on each step delete it and upload
+the next --- would re-transfer an entire cloud to the GPU every frame, which causes
+visible hitching and bounds the achievable frame rate. Instead, \emph{every} frame is
+uploaded to the renderer exactly once, at startup, as its own scene node, with all
+nodes hidden except frame~$0$; the static background, if present, is uploaded once and
+left permanently visible. Advancing the animation then merely toggles a node's
+visibility flag --- there is no per-frame disk read, decode, or re-upload --- so
+playback is smooth even at high frame rates and scrubbing to an arbitrary frame is
+instantaneous (Figure~\ref{fig:merge-timeline}). This strategy is affordable precisely
+because of the constant-topology principle: the per-frame payload is a small,
+fixed-size cloud, so holding all $F$ frames resident on the GPU at once costs $F$ times
+a modest constant rather than something that grows with motion. For the sequence lengths
+in this work the entire animation fits comfortably in GPU memory; were a capture long
+enough to exhaust it, the same node mechanism would extend naturally to a sliding
+window of resident frames streamed from disk, at the cost of reintroducing some
+per-frame transfer.
+
+\begin{figure}[!ht]
+    \centering
+    \resizebox{0.92\textwidth}{!}{
+    \begin{tikzpicture}[font=\small,
+        node/.style={draw, rounded corners=2pt, minimum width=1.15cm, minimum height=0.7cm, thick},
+        on/.style ={node, fill=green!22, draw=green!55!black},
+        off/.style={node, fill=gray!12, draw=gray!50},
+        bg/.style ={node, fill=orange!20, draw=orange!75!black, minimum width=8.2cm},
+        ar/.style ={-{Latex[length=2mm]}, thick},
+      ]
+      \node[bg] (bg) at (3.55,1.5) {static background node \;(always visible)};
+      \foreach \i/\x/\st in {0/0/on, 1/1.25/off, 2/2.5/off, 3/3.75/off, 4/5.0/off, 5/6.25/off}{
+        \node[\st] (f\i) at (\x,0) {frame \i};
+      }
+      \node at (7.4,0) {$\cdots$};
+      \draw[ar] (-0.7,-1.0) -- (7.7,-1.0) node[right]{frame index $t$ (visibility toggled)};
+      \draw[->, thick, green!50!black] (f0.south) to[out=-90,in=90] (0,-0.95);
+      \node[green!45!black, font=\footnotesize, anchor=west] at (0.2,-0.6){currently visible};
+    \end{tikzpicture}}
+    \caption{The merge renderer pre-loads all frames as Gaussian nodes (only the
+    current one visible) plus a permanently visible background node. Stepping or
+    playing toggles visibility, avoiding any per-frame re-upload.}
+    \label{fig:merge-timeline}
+\end{figure}
+
+\paragraph{Transport controls.} On top of this mechanism the renderer exposes the
+controls needed to inspect a dynamic reconstruction: a play/pause toggle, a loop
+switch that determines whether playback wraps from the last frame back to the first or
+halts, an adjustable playback rate in frames per second, and a frame slider with
+single-step buttons for advancing one frame at a time. Because the underlying frame
+switch is a visibility toggle, all of these --- continuous playback at a chosen rate,
+looping, and manual frame-by-frame scrubbing while paused --- operate at no rendering
+cost beyond drawing the single visible frame.
+
+\subsection{Temporal Compression}
+\label{sec:compression}
+
+\paragraph{Motivation.} The per-frame output is highly redundant, and the
+constant-topology principle is what makes the redundancy exploitable. Every frame
+contains the \emph{same} primitives in the \emph{same} order --- count and colour are
+held constant; only geometry and opacity evolve --- so the value of any single
+attribute of any single primitive, read across all frames, is a \emph{time series} of
+length $F$. Most of these series are either constant (the frozen colours), identically
+zero (the unused surface normals), or smooth (a position that traces a continuous
+trajectory). Storing each frame as an independent file ignores all of this structure
+and pays full price for every frame. Treating each attribute as a time series and
+compressing it in a frequency basis pays instead only for the few coefficients needed
+to describe its smooth evolution.
+
+The compressor stacks each attribute into an $F \times N$ matrix (frames by
+primitives) and classifies it into one of three modes
+(Figure~\ref{fig:compression}):
 \begin{itemize}
-    \item \textbf{Position.} The Gaussian mean is set directly from the COLMAP triangulation: $\boldsymbol{\mu}_i = \mathbf{x}_i$. These positions are stored as a learnable tensor and optimized throughout training.
-
-    \item \textbf{Color (DC Spherical Harmonic).} The mean observed RGB color is converted into the zeroth-order spherical harmonic coefficient using the standard SH basis normalization:
-    \begin{equation}
-        \text{SH}_i^{(0)} = \frac{\mathbf{c}_i - 0.5}{C_0}, \qquad C_0 = \frac{1}{2}\sqrt{\frac{1}{\pi}} \approx 0.282,
-    \end{equation}
-    such that when the SH basis is later evaluated at any viewing direction the DC term recovers the mean color. All higher-order coefficients (bands 1--3) are initialized to zero. This conservative choice forces the optimizer to grow view-dependent effects only when the loss explicitly demands them, avoiding spurious specular-looking artifacts in the first iterations.
-
-    \item \textbf{Scale.} The spatial extent of each Gaussian is derived from the local point density of the sparse cloud. For every point, the squared distance to its $k$-th nearest neighbor is computed on the GPU (the implementation uses the \texttt{simple\_knn} extension with $k=3$). Denoting this squared distance by $d_i^2$, the isotropic scale is set as:
-    \begin{equation}
-        s_i = \log\left(\sqrt{\max(d_i^2, \epsilon)}\right) \cdot \mathbf{1}_3, \qquad \epsilon = 10^{-7},
-    \end{equation}
-    which corresponds to the log-space representation used by the optimizer. At render time, the effective scaling matrix is recovered through the exponential activation:
-    \begin{equation}
-        \mathbf{S}_i = \text{diag}\bigl(\exp(s_{i,1}),\,\exp(s_{i,2}),\,\exp(s_{i,3})\bigr).
-    \end{equation}
-    Storing the logarithm rather than the raw scale ensures that $\mathbf{S}_i$ always yields a strictly positive scaling value, bypassing the need for projection-based positivity constraints during gradient descent. The isotropic initialization (same scale along all three axes) gives the optimizer the freedom to progressively anisotropize the Gaussians to fit elongated geometry.
-
-    \item \textbf{Rotation.} Rotations are stored as unit quaternions $q_i = (q_{i,w}, q_{i,x}, q_{i,y}, q_{i,z}) \in \mathbb{R}^4$ and initialized to the identity $q_i = (1, 0, 0, 0)$. The unit-norm constraint is enforced at query time through a non-parametric normalization:
-    \begin{equation}
-        \hat{q}_i = \frac{q_i}{\|q_i\|_2},
-    \end{equation}
-    so that the rotation activation always returns a valid rotation regardless of the raw optimized values. The quaternion is then mapped to a $3 \times 3$ rotation matrix via:
-    \begin{equation}
-        \mathbf{R}(\hat{q}) = \begin{bmatrix}
-            1 - 2(\hat{q}_y^2 + \hat{q}_z^2) & 2(\hat{q}_x\hat{q}_y - \hat{q}_w\hat{q}_z) & 2(\hat{q}_x\hat{q}_z + \hat{q}_w\hat{q}_y) \\
-            2(\hat{q}_x\hat{q}_y + \hat{q}_w\hat{q}_z) & 1 - 2(\hat{q}_x^2 + \hat{q}_z^2) & 2(\hat{q}_y\hat{q}_z - \hat{q}_w\hat{q}_x) \\
-            2(\hat{q}_x\hat{q}_z - \hat{q}_w\hat{q}_y) & 2(\hat{q}_y\hat{q}_z + \hat{q}_w\hat{q}_x) & 1 - 2(\hat{q}_x^2 + \hat{q}_y^2)
-        \end{bmatrix}.
-    \end{equation}
-    The per-Gaussian $3 \times 3$ covariance matrix, which is never stored explicitly, is then recovered as $\mathbf{\Sigma}_i = \mathbf{R}_i \mathbf{S}_i \mathbf{S}_i^\top \mathbf{R}_i^\top$.
-
-    \item \textbf{Opacity.} Each Gaussian is assigned an initial opacity of $\sigma_i = 0.1$, stored pre-activation through the inverse sigmoid:
-    \begin{equation}
-        \tilde{\sigma}_i = \sigma^{-1}(0.1) = \log\left(\frac{0.1}{0.9}\right) \approx -2.197,
-    \end{equation}
-    where the sigmoid and its inverse are defined by:
-    \begin{equation}
-        \sigma(x) = \frac{1}{1 + e^{-x}}, \qquad \sigma^{-1}(y) = \log\left(\frac{y}{1-y}\right).
-    \end{equation}
-    Storing the opacity in the pre-activation space and transforming it only at render time guarantees the bound $\sigma(\tilde{\sigma}_i) \in (0, 1)$ for every real-valued $\tilde{\sigma}_i$, so that no projection onto the feasible set is needed after each Adam step. The initial value of $0.1$ is intentionally low so that the scene starts mostly transparent; the optimizer must explicitly increase opacity where the loss gradient indicates that a Gaussian contributes positively to the image. This strategy reduces gradient interference between neighboring primitives at the start of training.
-
-    \item \textbf{Per-image exposure.} A per-camera $3 \times 4$ affine color correction matrix $\mathbf{E}_i = [\mathbf{A}_i | \mathbf{b}_i]$ is instantiated as the identity $[\mathbf{I}_3 | \mathbf{0}]$, where $\mathbf{A}_i \in \mathbb{R}^{3\times 3}$ acts as a learnable color gain and $\mathbf{b}_i \in \mathbb{R}^3$ acts as a per-channel bias. At loss time, the rendered color $\hat{\mathbf{c}}$ at every pixel is transformed by:
-    \begin{equation}
-        \hat{\mathbf{c}}' = \mathbf{A}_i \hat{\mathbf{c}} + \mathbf{b}_i.
-    \end{equation}
-    This parameter compensates for small photometric inconsistencies between input views (white-balance drift, automatic exposure, sensor noise) that would otherwise be absorbed into the Gaussian colors and produce flickering during novel-view rendering. Although the synthetic dataset used in this thesis is not subject to exposure drift, the parameter is kept active so that the same code path can be used on real-world captures without modification.
+    \item \textbf{Zero} --- attributes that are identically zero across all frames and
+    primitives (the surface normals $n_x, n_y, n_z$, which 3DGS does not use) are not
+    stored at all, only flagged.
+    \item \textbf{Constant} --- attributes whose temporal standard deviation is below a
+    small threshold for every primitive (the frozen colours $f_{\mathrm{dc}}$, which are
+    constant by construction) are stored once per primitive rather than once per frame.
+    \item \textbf{Time-varying} --- everything else (position, opacity, log-scale,
+    quaternion) is transformed along the time axis and truncated.
 \end{itemize}
 
-The degenerate case of an empty or severely under-constrained point cloud (for example, when COLMAP fails in highly textureless scenes) is handled by falling back to a dense random initialization inside a bounding box aligned with the scene's expected centroid. This fallback was rarely triggered during the experiments, since the feature-rich synthetic dataset always produced a stable COLMAP reconstruction, but it is a useful safety net when transitioning to noisier real-world captures.
+\begin{figure}[!ht]
+    \centering
+    \resizebox{\textwidth}{!}{\input{res/03_research/tikz/compression}}
+    \caption{Temporal compression of one attribute. The per-primitive time series is
+    transformed by the DCT; only the lowest $K$ coefficients are retained (chosen
+    adaptively per attribute), and the inverse transform reconstructs a smooth
+    low-pass fit. Identically-zero and constant-in-time attributes are detected and
+    stored trivially.}
+    \label{fig:compression}
+\end{figure}
 
-\subsubsection{Stage 2: Parameterization and Optimizer Setup}
+For a time-varying attribute $a$ with samples $a(0),\dots,a(F-1)$ over the $F$ frames,
+the compressor takes the type-II Discrete Cosine Transform (DCT) along time,
+\begin{equation}
+    \hat a[k] = \sqrt{\tfrac{2}{F}}\, \beta_k \sum_{t=0}^{F-1} a(t)\,
+    \cos\!\Big[\tfrac{\pi}{F}\big(t + \tfrac{1}{2}\big)k\Big],
+    \qquad k = 0,\dots,F-1,
+    \label{eq:dct}
+\end{equation}
+where $\hat a[k]$ is the $k$-th frequency coefficient, the cosine basis runs from the
+slowest ($k=0$, the temporal mean) to the fastest ($k = F-1$) variation, and
+$\beta_0 = 1/\sqrt 2$, $\beta_{k>0} = 1$ are the orthonormalization weights. Only the
+lowest $K$ coefficients are kept and the rest are set to zero; the inverse transform
+then reconstructs a smooth, low-pass fit to the attribute's evolution. The cut-off $K$
+is chosen \emph{adaptively per attribute} as the smallest number of coefficients that
+retains a target fraction $q$ of the signal energy, averaged over primitives,
+\begin{equation}
+    K = \min\Big\{ \kappa \;:\; \frac{\sum_{k<\kappa} \mathbb{E}_i\big[\hat a_i[k]^2\big]}
+    {\sum_{k} \mathbb{E}_i\big[\hat a_i[k]^2\big]} \ge q \Big\},
+    \label{eq:choosek}
+\end{equation}
+where $\mathbb{E}_i[\cdot]$ averages over the $N$ primitives, the numerator is the
+energy captured by the first $\kappa$ coefficients, and the denominator is the total
+energy; the ratio is the fraction of the signal explained, and $K$ is the smallest
+$\kappa$ for which it reaches the quality target $q$. A single hard cap bounds $K$ for
+the noisiest attributes, and the retained coefficients are stored in half precision,
+which was found to be effectively lossless here because the truncation error of
+Eq.~\eqref{eq:choosek} dominates the quantization error. The single knob $q$ thus
+trades file size against fidelity across all attributes at once.
 
-After initialization, all six Gaussian parameters are wrapped as \texttt{torch.nn.Parameter} tensors so that PyTorch's autograd can track their gradients through the rasterizer. Each group is assigned its own learning rate through a single Adam optimizer with disjoint parameter groups. This per-group parameterization is essential because the six attributes have very different sensitivities: positions must move slowly to avoid oscillating across surfaces, whereas opacities can change aggressively without destabilizing the reconstruction. Table~\ref{tab:lr-groups} summarizes the learning-rate schedule used in this work.
+\paragraph{Why the DCT and not the Fourier transform.} The natural alternative, the
+Discrete Fourier Transform (DFT), performs markedly worse here, and the reason is
+instructive. The motion is \emph{non-periodic}: the subject does not return to its
+starting pose at the end of the capture, so the value of an attribute at the last
+frame generally differs from its value at the first. The DFT implicitly treats the
+signal as periodic, so it sees a discontinuity at the wrap from the last frame back to
+the first, and representing that artificial jump requires energy spread across many
+high-frequency coefficients --- spectral leakage that defeats truncation. The DCT
+instead implicitly mirrors the signal at its endpoints (an even extension), which has
+no such discontinuity, so a smooth but non-periodic trajectory is captured by a few
+low-frequency coefficients. This is the same property that makes the DCT, rather than
+the DFT, the basis of image codecs such as JPEG. The on-disk artifact is the set of
+retained coefficients per time-varying attribute, the single stored value per constant
+attribute, and a small manifest recording each attribute's mode and its $K$;
+decompression applies the inverse of Eq.~\eqref{eq:dct} and reproduces standard
+per-frame files that load unchanged in any Gaussian-Splatting viewer, including the
+merge renderer of Section~\ref{sec:merge}.
+
+\section{Results and Discussion}
+\label{sec:results}
+
+This section evaluates the four mechanisms that distinguish the method --- velocity
+prediction, frustum clamping, silhouette supervision, and temporal compression --- on
+the synthetic room sequence captured by the $C = 4$ fixed cameras. A note on
+methodology applies throughout: because the subject occupies only a small fraction of
+each frame against a predominantly black background, any whole-image average is
+dominated by the trivially-correct background and is nearly blind to the quality of
+the reconstruction. All object-region metrics below (object PSNR, object coverage,
+background leak) are therefore computed only over the relevant pixels --- foreground
+pixels for quality, clearly-background pixels for leak --- so that the numbers reflect
+the subject rather than the empty space around it.
+
+\subsection{Velocity Prediction and Convergence}
+\label{sec:results-velocity}
+
+The benefit of velocity prediction is quantified by an early-stopping experiment that
+measures, frame by frame, how many tracking steps are needed to reach a fixed
+object-PSNR target, with and without the prediction, from an identical starting point.
+This isolates the effect of the warm start: both variants optimize the same frames
+with the same loss and budget, differing only in whether Eq.~\eqref{eq:velocity} is
+applied at each frame transition. On a 40-frame sequence with a target of $20$\,dB
+object PSNR, velocity prediction reaches the target in a mean of roughly $20$ steps per
+frame, against roughly $175$ steps without it --- a reduction of about $89\%$
+(Figure~\ref{fig:velocity-bars}) --- and every frame reaches the target under both
+settings, so the speed-up does not come at the cost of any frame failing to converge.
+
+The interpretation follows directly from the acceleration bound of
+Eq.~\eqref{eq:accel}: without the prediction the optimizer must close a displacement of
+order $\|\mathbf{v}\|$ each frame, whereas with it the optimizer need only close the
+acceleration residual of order $\|\mathbf{a}\|$, which for smooth human-scale motion is
+far smaller. Evaluated instead under a plateau criterion --- train each frame until its
+PSNR stops improving, rather than to a fixed target --- the warm-started variant not
+only converges faster but converges to a \emph{higher} quality, roughly $31$\,dB
+against $21$\,dB. The reason is that without a warm start the per-frame fit, starting
+far from the answer, tends to settle into a worse local optimum and drift, whereas the
+warm start places it in the basin of the correct solution. Velocity prediction is thus
+what makes the small tracking budget $N_t \ll N_0$ of Section~\ref{sec:tracking} viable,
+and it improves final quality as a side effect.
+
+\begin{figure}[!ht]
+    \centering
+    \begin{tikzpicture}
+    \begin{axis}[
+        ybar, width=0.72\textwidth, height=5.2cm,
+        ylabel={mean steps to $20$\,dB}, ymin=0, ymax=200,
+        symbolic x coords={with velocity, without velocity},
+        xtick=data, bar width=42pt,
+        nodes near coords, every node near coord/.append style={font=\small},
+        enlarge x limits=0.5,
+    ]
+    \addplot[fill=blue!35, draw=blue!60!black] coordinates {(with velocity,20) (without velocity,175)};
+    \end{axis}
+    \end{tikzpicture}
+    \caption{Mean tracking steps required to reach a $20$\,dB object-PSNR target, with
+    and without linear velocity prediction (40-frame sequence). Velocity prediction
+    cuts the per-frame step count by roughly $89\%$.}
+    \label{fig:velocity-bars}
+\end{figure}
+
+\subsection{Frustum Clamping}
+\label{sec:results-snap}
+
+Per-frame hull snapping is compared against the milder velocity-gating fallback over a
+16-frame tracking run (Table~\ref{tab:snap}). The comparison is designed to expose the
+runaway and left-behind failure modes of Section~\ref{sec:velocity}: gating only stops
+strays from coasting, whereas snapping actively reclaims them. Snapping keeps the
+subject markedly more complete and higher in quality --- mean object coverage rises
+from $0.893$ to $0.971$ and mean object PSNR from $13.24$ to $14.27$\,dB --- while
+keeping the cloud tighter, with the maximum primitive radius from the centre falling
+from $0.24$ to $0.19$ (a direct measure of how far runaways have escaped).
+
+The most telling statistic is not the mean but the \emph{trend}: under gating, object
+coverage degrades from $1.00$ at the first tracking frame to $0.78$ by the sixteenth as
+primitives are progressively left behind, whereas under snapping it holds at $0.94$. By
+the last frame snapping leads by roughly $1.5$\,dB and $0.16$ in coverage, and the gap
+widens monotonically over the sequence. A widening gap is the signature of a mechanism
+that counteracts a \emph{cumulative} degradation rather than merely a constant offset:
+each frame, snapping undoes the strays that gating would have allowed to accumulate, so
+its advantage compounds. This is exactly the behaviour predicted by the runaway
+analysis, in which un-reclaimed primitives are lost permanently and never replaced under
+the fixed count.
 
 \begin{table}[!ht]
     \centering
-    \begin{tabular}{lcl}
-        \hline
-        \textbf{Parameter} & \textbf{Initial LR} & \textbf{Notes} \\
-        \hline
-        Position $\boldsymbol{\mu}$ & $1.6 \times 10^{-4} \cdot r_\text{scene}$ & Exponentially decayed to $1.6 \times 10^{-6} \cdot r_\text{scene}$ \\
-        SH DC $\text{SH}^{(0)}$ & $2.5 \times 10^{-3}$ & Constant \\
-        SH Rest $\text{SH}^{(1..3)}$ & $1.25 \times 10^{-4}$ & Constant; $20 \times$ lower than DC \\
-        Opacity $\sigma$ & $2.5 \times 10^{-2}$ & Constant \\
-        Scale $\mathbf{s}$ & $5.0 \times 10^{-3}$ & Constant \\
-        Rotation $q$ & $1.0 \times 10^{-3}$ & Constant \\
-        Exposure $\mathbf{E}$ & $1.0 \times 10^{-2}$ & Exponentially decayed to $10^{-3}$ \\
-        \hline
+    \begin{tabular}{lccc}
+        \toprule
+        & mean object coverage & mean object PSNR & final cloud radius \\
+        \midrule
+        velocity gating          & $0.893$ ($1.00\!\to\!0.78$) & $13.24$\,dB ($\to 10.6$) & $0.24$ \\
+        hull snapping \emph{(default)} & $\mathbf{0.971}$ ($1.00\!\to\!0.94$) & $\mathbf{14.27}$\,dB ($\to 12.1$) & $\mathbf{0.19}$ \\
+        \bottomrule
     \end{tabular}
-    \caption{Per-group learning rates used during static scene optimization. The scene radius $r_\text{scene}$ is derived from the cameras' bounding sphere and ensures that positional updates scale with the physical extent of the reconstruction.}
-    \label{tab:lr-groups}
+    \caption{Frustum clamping over a 16-frame tracking run. Parenthetical values show
+    the first-to-last-frame trend. Snapping reclaims strays instead of leaving them
+    behind, holding coverage and quality.}
+    \label{tab:snap}
 \end{table}
 
-The positional learning rate is multiplied by the scene extent $r_\text{scene}$, a scalar that captures the effective size of the reconstruction volume, formally defined as:
-\begin{equation}
-    r_\text{scene} = 1.1 \cdot \max_{i \in \mathcal{C}} \left\| \mathbf{P}_i - \bar{\mathbf{P}} \right\|_2, \qquad \bar{\mathbf{P}} = \frac{1}{|\mathcal{C}|} \sum_{i \in \mathcal{C}} \mathbf{P}_i,
-\end{equation}
-where $\mathbf{P}_i$ is the world-space position of camera $i$ and $\bar{\mathbf{P}}$ is the centroid of the camera rig. Because COLMAP reconstructions live in an arbitrary metric scale (dictated by the initial two-view baseline), this normalization keeps positional step sizes geometrically consistent between scenes of different sizes. Both the positional learning rate and the exposure learning rate follow an exponential decay schedule interpolated in log-space between an initial and a final value:
-\begin{equation}
-    \eta(t) = \exp\!\left((1 - \phi(t)) \log \eta_\text{init} + \phi(t) \log \eta_\text{final}\right), \qquad \phi(t) = \text{clip}\!\left(\frac{t}{T_\text{max}},\,0,\,1\right).
-\end{equation}
-A dedicated Adam optimizer is also allocated for the exposure tensor so that its updates do not interact with the main Gaussian parameters. The Adam update rule, applied to every parameter group with its own learning rate $\eta$, reads:
-\begin{equation}
-    \mathbf{m}_t = \beta_1 \mathbf{m}_{t-1} + (1-\beta_1)\,\mathbf{g}_t, \quad
-    \mathbf{v}_t = \beta_2 \mathbf{v}_{t-1} + (1-\beta_2)\,\mathbf{g}_t^2, \quad
-    \boldsymbol{\theta}_t = \boldsymbol{\theta}_{t-1} - \eta\,\frac{\hat{\mathbf{m}}_t}{\sqrt{\hat{\mathbf{v}}_t} + \epsilon},
-\end{equation}
-where $\hat{\mathbf{m}}_t, \hat{\mathbf{v}}_t$ are the bias-corrected first and second moment estimates of the gradient $\mathbf{g}_t$, and $(\beta_1, \beta_2, \epsilon) = (0.9, 0.999, 10^{-15})$ are the Adam hyperparameters used in this implementation.
+\subsection{Foreground Masking}
+\label{sec:results-masking}
 
-\subsubsection{Stage 3: Iterative Optimization}
+The silhouette supervision of Section~\ref{sec:masking} is evaluated by tracking the
+mean rendered opacity that leaks into the clearly-background region over a 16-frame run
+--- a direct measure of the background drift the mechanism is meant to suppress
+(Table~\ref{tab:masking}). With the naive full-image loss, the leak grows by roughly
+two orders of magnitude across the sequence, from $0.0001$ at the first frame to
+$0.0127$ at the last, as dead primitives accumulate in empty space, and object coverage
+degrades to about $0.82$. With the masked loss and silhouette supervision the leak stays
+flat and low (mean $0.0020$, a threefold reduction) and the subject stays solid, holding
+$0.86$ to $0.95$ coverage. Crucially, it is not only the mean leak that improves but its
+\emph{growth}: the drift that compounds frame over frame under the full-image loss is
+essentially eliminated, which is what matters for a long capture.
 
-The optimization proceeds for 30\,000 iterations by default. A single iteration corresponds to rendering one random training view, computing the reconstruction loss, backpropagating the gradients through the differentiable rasterizer, and applying one Adam step. The sequence of operations is summarized in Algorithm~\ref{alg:static-train}.
+The same experiment validates the decision to leave opacity trainable. Additionally
+freezing opacity makes the leak about sixfold worse than the default, rising to $0.044$,
+for exactly the reason given in Section~\ref{sec:masking}: a primitive pushed into the
+background then has neither a photometric pull-back (the loss is masked away there) nor
+the ability to fade out (opacity is frozen), so it remains stuck bright and opaque
+off-object. Keeping opacity free is therefore what allows the silhouette term to fade
+strays away, and the measurements confirm that the count- and colour-freezing
+philosophy should not be extended to opacity.
 
-\begin{algorithm}[H]
-\SetAlgoLined
-\KwIn{Gaussian set $\mathcal{G}$, camera set $\mathcal{C}$, optimization parameters $\theta$}
-\KwOut{Trained Gaussian set $\mathcal{G}^*$}
-Initialize $\mathcal{G}$ from sparse point cloud\;
-\For{iteration $t = 1$ \KwTo $T$}{
-    Update learning rates according to scheduler\;
-    \If{$t \bmod 1000 = 0$}{
-        Increment active SH degree (up to $L = 3$)\;
-    }
-    Sample camera $\mathbf{v} \sim \mathcal{C}$ without replacement\;
-    Render image $\hat{I}$ via differentiable rasterization\;
-    Compute loss $\mathcal{L} = (1-\lambda)\,\mathcal{L}_1(\hat{I}, I) + \lambda\,(1 - \text{SSIM}(\hat{I}, I))$\;
-    \If{depth regularization enabled}{
-        $\mathcal{L} \mathrel{+}= \lambda_d(t) \cdot \mathcal{L}_1(\text{inv-depth}(\hat{I}), \text{mono-depth}(I))$\;
-    }
-    Backpropagate: $\mathcal{L}.\text{backward}()$\;
-    Accumulate view-space gradient statistics into $\mathcal{G}$\;
-    \If{$t_\text{ds-start} < t < t_\text{ds-end}$ \textbf{and} $t \bmod \Delta_\text{ds} = 0$}{
-        \textsc{DensifyAndPrune}($\mathcal{G}$, $\nabla_\text{thresh}$, scene-extent)\;
-    }
-    \If{$t \bmod T_\text{reset} = 0$}{
-        Reset all opacities to $\min(\sigma, 0.01)$\;
-    }
-    Step both optimizers; zero gradients\;
-}
-\caption{Static scene optimization loop.}
-\label{alg:static-train}
-\end{algorithm}
+\begin{table}[!ht]
+    \centering
+    \begin{tabular}{lccc}
+        \toprule
+        & mean background leak & leak trend (16 frames) & object coverage \\
+        \midrule
+        full-image loss              & $0.0059$ & grows $\sim\!100\times$ ($0.0001\!\to\!0.0127$) & degrades to $\sim\!0.82$ \\
+        masked $+$ silhouette \emph{(default)} & $\mathbf{0.0020}$ & flat \& low ($\le 0.0033$) & holds $0.86$--$0.95$ \\
+        freeze opacity \& colour     & $0.0123$ & grows worst ($\to 0.044$) & $0.888$ \\
+        \bottomrule
+    \end{tabular}
+    \caption{Background-drift suppression. Masking the photometric loss and supervising
+    the silhouette suppresses background fitting and, more importantly, eliminates its
+    frame-over-frame growth.}
+    \label{tab:masking}
+\end{table}
 
-\paragraph{Photometric loss.} The primary supervisory signal is the combination of an L1 pixel-wise loss and a Structural Similarity Index (SSIM) term. Let $\hat{I}, I \in \mathbb{R}^{3 \times H \times W}$ denote respectively the rendered and ground-truth images. The per-image L1 loss is:
-\begin{equation}
-    \mathcal{L}_1(\hat{I}, I) = \frac{1}{3HW} \sum_{c=1}^{3} \sum_{u=1}^{H} \sum_{v=1}^{W} \left| \hat{I}_{c,u,v} - I_{c,u,v} \right|.
-\end{equation}
-The SSIM term compares the local statistics of the two images through a sliding $11 \times 11$ Gaussian window. For every pixel location $\mathbf{p}$ it computes the local means $\mu_{\hat{I}}, \mu_I$, the local variances $\sigma^2_{\hat{I}}, \sigma^2_I$, and the cross-covariance $\sigma_{\hat{I} I}$. The SSIM map is then:
-\begin{equation}
-    \text{SSIM}(\mathbf{p}) = \frac{(2\mu_{\hat{I}}\mu_I + C_1)(2\sigma_{\hat{I}I} + C_2)}{(\mu_{\hat{I}}^2 + \mu_I^2 + C_1)(\sigma_{\hat{I}}^2 + \sigma_I^2 + C_2)},
-\end{equation}
-with constants $C_1 = 0.01^2$ and $C_2 = 0.03^2$, and the scalar SSIM is the spatial mean of this map. The combined photometric loss finally reads:
-\begin{equation}
-    \mathcal{L}_\text{photo} = (1 - \lambda_\text{DSSIM}) \, \mathcal{L}_1(\hat{I}, I) + \lambda_\text{DSSIM} \, \bigl(1 - \text{SSIM}(\hat{I}, I)\bigr),
-\end{equation}
-with $\lambda_\text{DSSIM} = 0.2$. The L1 term drives pixel-accurate color reproduction, while the SSIM term enforces structural coherence over local image patches, preventing the optimizer from simply smearing large, over-smoothed Gaussians across the scene. When a CUDA-accelerated fused SSIM kernel is available (\texttt{fused\_ssim}), it is used to reduce the cost of the loss computation by roughly $2\times$ relative to the PyTorch reference implementation.
+\subsection{Temporal Compression}
+\label{sec:results-compression}
 
-\paragraph{Viewpoint sampling.} Random viewpoint sampling is performed without replacement inside an epoch: the algorithm draws camera indices uniformly from the training set, and once every camera has been visited the stack is refilled. This guarantees that all views receive equal gradient updates within one epoch and avoids the pathological case where certain cameras are oversampled and others are starved for gradient signal.
+The compressor is evaluated on a 123-frame sequence of $4256$ primitives ($35.6$\,MB
+raw) by sweeping the single quality knob $q$ of Eq.~\eqref{eq:choosek} and measuring
+both the on-disk compression ratio and the render PSNR of the reconstructed clouds
+against the originals (Table~\ref{tab:compression}, Figure~\ref{fig:rate-distortion}).
+At the default $q = 0.999$ the sequence compresses by $9.6\times$ at $30.1$\,dB ---
+already roughly twice the $5\times$ target at this quality --- and the operating point
+moves smoothly from $6.8\times$ at $37.9$\,dB down to $41.6\times$ at $25.1$\,dB as $q$
+is lowered. The rate--distortion curve is steep at the high-fidelity end, meaning a
+small concession in PSNR buys a large reduction in size, and flattens toward the
+aggressive end, the usual diminishing return of lossy compression.
 
-\paragraph{Progressive spherical-harmonic unveiling.} The maximum spherical-harmonic degree $L$ is set to $3$, meaning that each Gaussian stores $3(L+1)^2 = 48$ color coefficients. View-dependent color is evaluated on-the-fly from the stored SH basis. Denoting by $\mathbf{d} \in \mathbb{S}^2$ the unit-length viewing direction from the Gaussian to the camera, the recovered color at degree $\ell$ is:
-\begin{equation}
-    \mathbf{c}(\mathbf{d}) = \sum_{\ell' = 0}^{\ell} \sum_{m = -\ell'}^{\ell'} \mathbf{k}_{\ell', m} \, Y_{\ell'}^{m}(\mathbf{d}),
-\end{equation}
-where $Y_{\ell'}^{m}$ is the real spherical-harmonic basis and $\mathbf{k}_{\ell', m} \in \mathbb{R}^3$ are the learned per-Gaussian coefficients. Training with all coefficients active from the start tends to encourage overfitting to view-dependent high-frequency noise and generally produces ghosting artifacts. To mitigate this, the active SH degree is incremented by one every 1\,000 iterations according to:
-\begin{equation}
-    \ell_\text{active}(t) = \min\!\left(\left\lfloor \frac{t}{1000} \right\rfloor,\, L\right),
-\end{equation}
-so that iteration 0 uses only the DC term (diffuse color), iteration 1\,000 unlocks band 1, iteration 2\,000 unlocks band 2, and iteration 3\,000 unlocks band 3. By the time the densification phase ends, all harmonics are free to learn view-dependent appearance.
+Two structural facts explain the favourable numbers. First, colours and normals are
+\emph{exactly} lossless --- they are handled by the constant and zero modes, not by
+truncation --- so all error is confined to geometry, where the position error is under
+$1\%$ of the scene span. Second, the per-attribute coefficient budget confirms the
+motivation for the DCT: the smooth position channels are captured by only about $15$,
+$19$, and $7$ coefficients in $x$, $y$, and $z$ respectively, whereas the noisier
+opacity and quaternion channels consume the most coefficients and hit the cap. This
+points directly at where further gains lie --- lowering the cap on the noisy channels
+costs little fidelity --- and confirms that the smooth, predictable motion the velocity
+model exploits is also what the compressor exploits, from the opposite direction.
 
-\paragraph{Adaptive density control.} The densification machinery, described formally in Chapter 2, is active between iterations $500$ and $15\,000$, and is invoked every $100$ iterations. Between invocations, each Gaussian accumulates per-iteration statistics of the norm of its view-space positional gradient:
-\begin{equation}
-    \bar{g}_i = \frac{1}{n_i}\sum_{t \in \mathcal{T}_i} \left\| \nabla_{\boldsymbol{\mu}_i} \hat{I}_t \bigr|_{\text{view-space}} \right\|_2,
-\end{equation}
-where $\mathcal{T}_i$ is the set of iterations in which primitive $i$ was visible (i.e., $\text{radii}_i > 0$) and $n_i = |\mathcal{T}_i|$. At each densification step, Gaussians whose mean gradient exceeds a threshold $\tau = 2 \times 10^{-4}$ are considered under-fit and handled according to two regimes:
-\begin{itemize}
-    \item \textbf{Cloned} if their current scale satisfies $\max_k \mathbf{S}_{i,k} \leq 0.01 \cdot r_\text{scene}$. A duplicate primitive $g_i'$ inherits all parameters of $g_i$ and is displaced along the position gradient, thus densifying a locally under-covered region:
-    \begin{equation}
-        \boldsymbol{\mu}_{i'} = \boldsymbol{\mu}_i + \alpha \cdot \nabla_{\boldsymbol{\mu}_i} \mathcal{L}, \qquad \alpha > 0.
-    \end{equation}
-    \item \textbf{Split into two} if $\max_k \mathbf{S}_{i,k} > 0.01 \cdot r_\text{scene}$. Two child Gaussians are produced, their scales reduced by a factor $1 / (0.8\, N)$ with $N = 2$, and their positions perturbed by samples drawn from the parent's 3D Gaussian:
-    \begin{equation}
-        \boldsymbol{\mu}_{i',k} = \boldsymbol{\mu}_i + \mathbf{R}_i \, \boldsymbol{\xi}_k, \qquad \boldsymbol{\xi}_k \sim \mathcal{N}(\mathbf{0},\,\mathbf{S}_i^2), \quad k = 1,\dots,N.
-    \end{equation}
-    The parent Gaussian is then deleted, yielding a net addition of $N - 1$ primitives per split.
-\end{itemize}
-After densification, the opposite direction is also handled: any primitive whose activated opacity has fallen below $0.005$ is pruned, and so are primitives whose screen-space footprint exceeds $20$ pixels or whose world-space scale exceeds $10\%$ of the scene extent. Formally, the prune mask is:
-\begin{equation}
-    m_i = \bigl[\sigma(\tilde{\sigma}_i) < 0.005\bigr] \; \lor \; \bigl[r_i^\text{2D} > 20\bigr] \; \lor \; \bigl[\max_k \mathbf{S}_{i,k} > 0.1 \cdot r_\text{scene}\bigr],
-\end{equation}
-where the bracket notation denotes the Iverson bracket, equal to $1$ when the enclosed predicate is true and $0$ otherwise, and $\lor$ is the logical OR. This last heuristic is critical in indoor scenes: without it, the optimizer occasionally grows a single enormous Gaussian that covers a whole wall, which is cheap in terms of L1 loss but causes severe artifacts under novel views.
+\begin{table}[!ht]
+    \centering
+    \begin{tabular}{lcc}
+        \toprule
+        quality $q$ & compression ratio & render PSNR vs.\ original \\
+        \midrule
+        $0.98$  & $41.6\times$ & $25.1$\,dB \\
+        $0.99$  & $25.7\times$ & $25.6$\,dB \\
+        $0.995$ & $15.9\times$ & $26.4$\,dB \\
+        $0.999$ \emph{(default)} & $\mathbf{9.6\times}$ & $\mathbf{30.1}$\,dB \\
+        $0.9999$ & $6.8\times$ & $37.9$\,dB \\
+        \bottomrule
+    \end{tabular}
+    \caption{Temporal compression rate--distortion on a 123-frame, 4256-primitive
+    sequence. A single quality knob $q$ trades ratio against fidelity.}
+    \label{tab:compression}
+\end{table}
 
-\paragraph{Periodic opacity reset.} Every $3\,000$ iterations all opacities are clamped to a ceiling of $0.01$ (stored in pre-activation space) through the transformation:
-\begin{equation}
-    \tilde{\sigma}_i \leftarrow \sigma^{-1}\!\bigl(\min(\sigma(\tilde{\sigma}_i),\,0.01)\bigr).
-\end{equation}
-This aggressive step forces the optimizer to re-grow opacity from scratch, which in practice flushes out \emph{floaters}, i.e.~semi-transparent Gaussians that accumulate in empty regions of the scene due to noisy gradients. Gaussians that truly represent surface geometry quickly recover their opacity in a handful of iterations, while floaters are typically pruned at the next densification pass.
+\begin{figure}[!ht]
+    \centering
+    \begin{tikzpicture}
+    \begin{axis}[
+        width=0.75\textwidth, height=5.6cm,
+        xlabel={compression ratio ($\times$)}, ylabel={render PSNR [dB]},
+        xmin=0, xmax=45, ymin=22, ymax=40,
+        grid=both, grid style={gray!20},
+        mark size=2.2pt,
+    ]
+    \addplot[blue!60!black, thick, mark=*] coordinates {
+        (6.8,37.9) (9.6,30.1) (15.9,26.4) (25.7,25.6) (41.6,25.1)
+    };
+    \node[anchor=south west, font=\footnotesize, blue!55!black] at (axis cs:9.6,30.1) {$q{=}0.999$};
+    \end{axis}
+    \end{tikzpicture}
+    \caption{Rate--distortion curve of the temporal compressor. The default operating
+    point ($q = 0.999$, $9.6\times$, $30.1$\,dB) is marked; fidelity rises steeply as
+    the ratio is relaxed.}
+    \label{fig:rate-distortion}
+\end{figure}
 
-\paragraph{Depth regularization.} When a monocular depth estimator is available, an additional L1 loss between the inverse depth rendered by the splatter and the estimated inverse depth is added:
-\begin{equation}
-    \mathcal{L}_\text{depth} = \lambda_d(t) \cdot \left\| (\hat{d}^{-1} - d^{-1}) \odot M \right\|_1,
-\end{equation}
-where $M$ is a validity mask and $\lambda_d$ decays exponentially from $1.0$ to $0.01$ over the course of training. This term is mainly useful for resolving the well-known \emph{shape-radiance ambiguity} in regions where few cameras provide triangulation constraints (e.g., the corners of a room). In the purely synthetic experiments this signal is not strictly required, but the path is kept available for real-world captures.
+\subsection{Summary}
+\label{sec:results-summary}
 
-\paragraph{Per-image exposure correction.} In parallel to the Gaussian optimizer, a second Adam instance updates the per-image exposure matrices. The rendered image $\hat{I}$ is linearly transformed via $\hat{I}' = \mathbf{E}_i \hat{I}$ before being compared against the ground-truth frame. This small amount of extra flexibility prevents the Gaussian colors from absorbing per-view photometric drift, and in practice reduces the final PSNR noise floor by a measurable margin on real data.
-
-\subsubsection{Stage 4: Serialization}
-
-Once the 30\,000 iterations have been exhausted, the trained Gaussian set is written to disk in the PLY format. Each vertex entry stores the position ($x$, $y$, $z$), a placeholder normal (set to zero, since 3DGS does not optimize surface normals explicitly), the flattened SH coefficients ($3$ DC + $3 \cdot ((L+1)^2 - 1) = 45$ rest), the pre-activation opacity, the three log-scales, and the four quaternion components. This format is compatible with the reference 3DGS viewer and with the in-house C++ renderer described earlier in this chapter, so that qualitative inspection and quantitative benchmarking can happen against the same artifact.
+Taken together, the measurements support the three design claims of
+Section~\ref{sec:overview}. Temporal coherence and bounded cost follow from the
+constant-count, frozen-colour tracking regime, which both the merge renderer and the
+temporal compressor exploit from opposite ends: the renderer composites a fixed-size
+cloud per frame with zero re-upload, and the compressor reaches roughly $10\times$ at
+$30$\,dB by treating each primitive's trajectory as a smooth, individually-truncated
+time series. The separation of motion from appearance is enforced jointly by the frozen
+colours, the silhouette supervision that prevents background drift, and the frustum
+snapping that reclaims strays --- together holding object coverage near $0.97$ where the
+unconstrained baseline degrades below $0.80$. Velocity prediction makes the regime
+efficient, cutting per-frame tracking by roughly $89\%$ while improving final quality.
+The qualitative renders that accompany these measurements --- per-frame montages of the
+moving subject, the composited scene in the merge renderer, and the displacement-coloured
+emergent partition --- are collected in the following figures.
 
 \begin{figure}[!ht]
     \begin{center}
-        \fbox{\parbox{0.8\linewidth}{\vspace{5cm}\centering\emph{[Placeholder: side-by-side render comparing ground truth view, initial Gaussians from point cloud, and fully trained static reconstruction.]}\vspace{5cm}}}
+        \fbox{\parbox{0.85\linewidth}{\vspace{3.5cm}\centering\emph{[Placeholder:
+        montage of reconstructed frames $t = 0, 10, \dots$ of the moving subject, with
+        ground truth alongside, showing temporal consistency.]}\vspace{3.5cm}}}
     \end{center}
-    \caption{Evolution of the static reconstruction from sparse point-cloud initialization to final converged Gaussian field.}
-    \label{fig:static-evolution}
+    \caption{Qualitative temporal consistency of the dynamic reconstruction.}
+    \label{fig:qual-temporal}
 \end{figure}
 
 \begin{figure}[!ht]
     \begin{center}
-        \fbox{\parbox{0.8\linewidth}{\vspace{5cm}\centering\emph{[Placeholder: novel-view renders of the static reconstruction at four different viewpoints, with ground-truth renders alongside for direct comparison.]}\vspace{5cm}}}
+        \fbox{\parbox{0.85\linewidth}{\vspace{3.5cm}\centering\emph{[Placeholder:
+        screenshot of the merge renderer compositing the static background with the
+        dynamic foreground, with the playback controls visible.]}\vspace{3.5cm}}}
     \end{center}
-    \caption{Qualitative evaluation of the converged static Gaussian scene on held-out novel views.}
-    \label{fig:static-novel-views}
-\end{figure}
-
-\subsection{Dynamic Scene Reconstruction using 3DGS}
-
-Up to this point the thesis has considered a scene as a fundamentally \emph{static} entity: geometry and radiance are captured once and frozen into a single PLY. Real indoor environments, however, are rarely static. People move through a room, chairs slide, curtains flutter, a projector flickers on a wall. Any reconstruction framework that aims to support downstream applications in psychological research, behavioural analysis, or immersive review must therefore be able to preserve \emph{temporal coherence}: the reconstructed 4D field must represent the same room across time, only locally modulated by motion. This section describes the dynamic reconstruction pipeline implemented in \texttt{train\_video.py}, which turns the single-frame static reconstruction into a temporal sequence of Gaussian fields while keeping inter-frame coherence and memory footprint under control.
-
-\subsubsection{Conceptual Foundation: Static--Dynamic Partitioning}
-
-The central design principle of the proposed method is a \textbf{conceptual partitioning of the scene into a static component and a dynamic component}. Formally, the full set of Gaussians at time $t$ is assumed to decompose as the disjoint union:
-\begin{equation}
-    \mathcal{G}_t = \mathcal{G}_t^{\text{static}} \, \sqcup \, \mathcal{G}_t^{\text{dynamic}},
-\end{equation}
-with the corresponding temporal constraints:
-\begin{equation}
-    \forall t,\, \forall g_i \in \mathcal{G}^{\text{static}}:\; \boldsymbol{\mu}_i(t) = \boldsymbol{\mu}_i(0), \qquad
-    \forall g_i \in \mathcal{G}^{\text{dynamic}}:\; \boldsymbol{\mu}_i(t) = \boldsymbol{\mu}_i(0) + \boldsymbol{\delta}_i(t),
-\end{equation}
-where $\boldsymbol{\delta}_i(t) \in \mathbb{R}^3$ is a per-primitive, per-frame displacement. The static component consists of all geometry that does not change across the capture, i.e., walls, ceiling, floor, furniture, and stationary objects. The dynamic component consists of non-rigid actors such as humans, or of rigid objects that are physically moved during the capture. A naive video-3DGS approach would re-train one independent Gaussian field per frame, duplicating the static background thousands of times and wasting both computation and storage. A second naive approach would densely store per-Gaussian temporal trajectories (as in 4D-GS or Deformable 3DGS), which is memory-efficient in theory but blurs the geometric semantics of individual splats and suffers from temporal over-smoothing.
-
-The method proposed here takes a pragmatic middle path. Rather than splitting the scene through explicit semantic segmentation (which would itself require a reliable vision model), the partition is \emph{emergent}: a single shared set of Gaussians is fit on the first frame of the video, and all subsequent frames are reconstructed by perturbing only those primitives that must move to explain the new observations. Splats that cover stationary background geometry remain numerically near-stationary because their reprojection gradient is already near zero; splats that cover moving content receive strong gradients and migrate across frames. No explicit mask is required, yet the optimization naturally concentrates its effort on the dynamic subset.
-
-This framing has three important practical consequences:
-\begin{enumerate}
-    \item The \textbf{topology of the Gaussian set is frozen after the first frame}: no primitive is created and no primitive is deleted during tracking. This guarantees that the same splat represents the same physical feature through time, which is crucial for any downstream temporal analysis (trajectory extraction, re-timing, blending).
-    \item The \textbf{appearance (color / spherical-harmonic coefficients) is frozen after the first frame}. Under the static--dynamic assumption, the material properties of scene surfaces do not change over the capture; only their geometry does. Freezing the SH coefficients prevents the optimizer from explaining motion by \emph{repainting} Gaussians instead of moving them, which is a well-known failure mode of unconstrained per-frame 3DGS.
-    \item \textbf{Memory scales linearly with time, not with motion complexity}: each frame is stored as a PLY file that contains only the changed per-splat geometry. Since the number of splats is fixed after frame 0, the per-frame payload is a small delta on top of the static reference.
-\end{enumerate}
-
-\subsubsection{Dataset Layout and Temporal Consistency}
-
-The dynamic method assumes a capture rig of fixed cameras with synchronized shutters. This assumption dramatically simplifies the temporal problem: because extrinsics and intrinsics are constant, the COLMAP reconstruction needs to be run only once, on the first frame of the sequence. All subsequent frames reuse the same camera calibration without re-registration. The expected dataset layout is:
-\begin{verbatim}
-dataset/
-├── sparse/0/            # COLMAP output from the first frame
-│   ├── cameras.bin
-│   ├── images.bin       # references images like cam01.jpg
-│   └── points3D.bin
-├── images/              # First-frame images used by COLMAP
-│   ├── cam01.jpg
-│   └── cam02.jpg
-└── frames/              # Temporal video frames, one folder per camera
-    ├── cam01/
-    │   ├── 00000.jpg
-    │   ├── 00001.jpg
-    │   └── ...
-    └── cam02/
-        ├── 00000.jpg
-        └── ...
-\end{verbatim}
-Each camera folder under \texttt{frames/} is named after the COLMAP image name (minus the extension) and contains the temporal sequence sorted alphabetically, which is equivalent to temporal order when frames are zero-padded. The discovery routine verifies that every camera contributes the same number of frames and that frame filenames match across cameras; any mismatch raises an error before training begins, since asynchronous frames would cause geometric inconsistencies that the optimizer cannot recover from.
-
-\subsubsection{Pipeline Overview}
-
-The full dynamic reconstruction pipeline is summarized in Algorithm~\ref{alg:dynamic-train}. It iterates over the sequence of frame indices $t = 0, 1, \dots, T - 1$ and applies one of two optimization regimes depending on whether the current frame is the reference (\emph{key frame}) or a subsequent frame (\emph{tracking frame}).
-
-\begin{algorithm}[H]
-\SetAlgoLined
-\KwIn{Camera calibration $\mathcal{C}$, per-camera video frames $\mathcal{F}$, sparse point cloud $\mathcal{P}$}
-\KwOut{Per-frame PLY sequence $\{\mathcal{G}_t\}_{t=0}^{T-1}$}
-$\mathcal{G} \gets $ Gaussians initialized from $\mathcal{P}$\;
-$\boldsymbol{\mu}_{-1}, \boldsymbol{\mu}_{-2} \gets \emptyset$\;
-\For{$t = 0$ \KwTo $T - 1$}{
-    Swap camera image paths so every camera now reads frame $t$\;
-    \eIf{$t = 0$}{
-        \textbf{Initial reconstruction:} run $N_0 = 2000$ iterations with densification\;
-        \If{dark pruning enabled}{Apply dark-Gaussian prune to clean floaters\;}
-    }{
-        \If{velocity prediction enabled \textbf{and} $t \geq 2$}{
-            $\Delta \boldsymbol{\mu} \gets \boldsymbol{\mu}_{t-1} - \boldsymbol{\mu}_{t-2}$\;
-            $\boldsymbol{\mu} \gets \boldsymbol{\mu} + \Delta \boldsymbol{\mu}$ \tcp*{linear extrapolation}
-        }
-        Freeze SH coefficients (\texttt{f\_dc}, \texttt{f\_rest})\;
-        \textbf{Tracking:} run $N_t = 500$ iterations, no densification\;
-    }
-    Save $\mathcal{G}$ as PLY \texttt{frames/\{t:05d\}.ply}\;
-    $\boldsymbol{\mu}_{t-2} \gets \boldsymbol{\mu}_{t-1}$;\ \ $\boldsymbol{\mu}_{t-1} \gets \boldsymbol{\mu}_t$\;
-}
-\caption{Dynamic scene reconstruction with shared Gaussians and per-frame tracking.}
-\label{alg:dynamic-train}
-\end{algorithm}
-
-The two regimes are intentionally asymmetric: the key frame receives a large iteration budget to establish a high-quality topology, whereas each tracking frame only needs to propagate small geometric adjustments and therefore trains for a fraction of the iterations. This budget split was chosen empirically; a longer tracking budget did not measurably improve PSNR, while a shorter one produced visible lag on fast-moving limbs.
-
-\subsubsection{The Key Frame: High-Quality Initial Reconstruction}
-
-The first frame of the video is reconstructed with the full 3DGS machinery described in Section 3.2.3, including adaptive density control, but with a reduced iteration count (2\,000 iterations by default). The reasoning behind the reduced budget is twofold. First, the per-frame training time must remain manageable: at 30\,000 iterations per frame, a one-minute video at 30\,fps would require $1.8$ million optimizer steps. Second, the subsequent tracking stage can refine any residual reconstruction error over several frames, so the key frame does not need to be rendered at the same absolute quality as a standalone static reconstruction; it only needs to establish a topologically sound Gaussian set.
-
-Two features differentiate the key-frame stage from a vanilla static fit:
-
-\paragraph{Dark Gaussian pruning.} A configurable post-processing step removes Gaussians whose SH DC coefficient encodes a color darker than a threshold. Formally, the recovered RGB color at the zeroth order is:
-\begin{equation}
-    \text{SH2RGB}(\text{SH}_i^{(0)}) = C_0 \cdot \text{SH}_i^{(0)} + \tfrac{1}{2}\mathbf{1}_3, \qquad C_0 = \frac{1}{2}\sqrt{\frac{1}{\pi}},
-\end{equation}
-and the per-Gaussian brightness is defined as the mean of its recovered RGB channels:
-\begin{equation}
-    b_i = \frac{1}{3} \sum_{k=1}^{3} \text{SH2RGB}(\text{SH}_i^{(0)})_k.
-\end{equation}
-Every Gaussian satisfying the pruning predicate:
-\begin{equation}
-    b_i < 1 - \tau_\text{dark}, \qquad \tau_\text{dark} \in [0, 1],
-\end{equation}
-is pruned, with $\tau_\text{dark} = 0.9$ by default, so that the surviving brightness floor is $0.1$. This heuristic exploits a structural property of most indoor captures: the controlled lighting ensures that genuine surface splats are at least mildly illuminated. Very dark Gaussians are therefore, with high probability, either (i) spurious splats fitted to sensor noise in shadowed regions, or (ii) degenerate primitives that survived densification with near-zero contribution to the rendered image. Pruning them saves memory and accelerates every subsequent tracking step, since the number of splats directly drives the rasterizer's workload. The prune is applied periodically during training and once more at the very end of the key-frame optimization. Empirically, on the synthetic room dataset the prune removes 5--15\% of the total splat count without any perceivable degradation of the final render. The operation goes through the same \texttt{prune\_points} code path used by the standard densifier, which means that it updates the optimizer state, the gradient accumulators, and the max-radius buffer consistently.
-
-\paragraph{Per-camera exposure anchoring.} The exposure parameters learned during the key frame are kept throughout tracking. Since cameras are static, the illumination of the room stays stable across the entire sequence, and re-learning per-camera exposure every frame would introduce noise into the tracking gradients. Tying the exposure to the key frame is therefore a natural consequence of the static-background assumption.
-
-\subsubsection{Tracking Frames: Constrained Temporal Optimization}
-
-Once the key frame has produced a reference Gaussian set $\mathcal{G}_0$, each subsequent frame is reconstructed by re-running the optimizer against that same set, with three constraints carefully layered on top of the base 3DGS loop.
-
-\paragraph{Constraint 1: No densification, no pruning.} The densification branch is entirely disabled during tracking. The number of Gaussians is therefore strictly conserved: $|\mathcal{G}_t| = |\mathcal{G}_0|$ for all $t$. This is what enables a 1-to-1 correspondence between splats across frames, which in turn enables velocity estimation, trajectory visualization, and any downstream temporal analysis. Crucially, opacity reset is also skipped: since the Gaussians are already well-placed, a reset would only throw away useful information and inject transient reconstruction artifacts at frame boundaries.
-
-\paragraph{Constraint 2: Frozen spherical-harmonic coefficients.} Before the tracking iterations begin, the learning rates of both the DC and the rest SH parameter groups are set to zero, and their \texttt{requires\_grad} flag is disabled. Formally, this amounts to restricting the parameter update set:
-\begin{equation}
-    \Theta_\text{trackable} = \{\boldsymbol{\mu}_i,\,s_i,\,q_i,\,\tilde{\sigma}_i\}_{i=1}^{M}, \qquad \Theta_\text{frozen} = \{\text{SH}_i^{(0)},\,\text{SH}_i^{(1..L)}\}_{i=1}^{M},
-\end{equation}
-so that for every tracking iteration $t$:
-\begin{equation}
-    \boldsymbol{\theta} \in \Theta_\text{trackable}: \; \boldsymbol{\theta}_t = \boldsymbol{\theta}_{t-1} - \eta_{\boldsymbol{\theta}} \nabla_{\boldsymbol{\theta}} \mathcal{L}_t, \qquad
-    \boldsymbol{\theta} \in \Theta_\text{frozen}: \; \boldsymbol{\theta}_t = \boldsymbol{\theta}_0.
-\end{equation}
-This decouples the tracking problem from the appearance problem. The intuition is that for a Lambertian indoor surface moving rigidly with a human body (e.g., the fabric of a shirt), the RGB reflectance at any given point on the body is approximately constant in time; what changes is only \emph{where that point is} in world space. If the optimizer were allowed to edit SH coefficients during tracking, it would find the degenerate local minimum of painting the background in the shape of the moving subject rather than moving the subject's splats. Freezing colors enforces an inductive bias that matches the physics of the problem. This is controlled by the \texttt{-{}-freeze-colors} CLI flag (on by default).
-
-\paragraph{Constraint 3: Linear velocity prediction.} A key contribution of this work is the use of a first-order temporal extrapolation to warm-start each tracking step. Let $\boldsymbol{\mu}_t^{(i)} \in \mathbb{R}^3$ denote the position of Gaussian $i$ after frame $t$ has been fully optimized. Assuming constant inter-frame spacing $\Delta t$, the instantaneous velocity at frame $t-1$ is approximated by backward finite differences:
-\begin{equation}
-    \mathbf{v}_{t-1}^{(i)} = \frac{\boldsymbol{\mu}_{t-1}^{(i)} - \boldsymbol{\mu}_{t-2}^{(i)}}{\Delta t}.
-\end{equation}
-A first-order Taylor expansion of the position trajectory $\boldsymbol{\mu}^{(i)}(t)$ around $t-1$ predicts the position at the next frame:
-\begin{equation}
-    \boldsymbol{\mu}_{t,\text{pred}}^{(i)} = \boldsymbol{\mu}_{t-1}^{(i)} + \Delta t \cdot \mathbf{v}_{t-1}^{(i)} + \mathcal{O}(\Delta t^2),
-\end{equation}
-which, with unit time step $\Delta t = 1$, simplifies to the in-place update used before each tracking frame:
-\begin{equation}
-    \boldsymbol{\mu}_t^{(i)} \leftarrow \boldsymbol{\mu}_{t-1}^{(i)} + \bigl(\boldsymbol{\mu}_{t-1}^{(i)} - \boldsymbol{\mu}_{t-2}^{(i)}\bigr).
-\end{equation}
-The expected displacement magnitude at frame $t$ thus reduces from the full inter-frame distance to the magnitude of the acceleration residual:
-\begin{equation}
-    \left\| \boldsymbol{\mu}_t^{(i), \star} - \boldsymbol{\mu}_t^{(i),\text{pred}} \right\|_2 \;\approx\; \frac{1}{2} \, \Delta t^2 \, \left\|\mathbf{a}_{t-1}^{(i)}\right\|_2 \;\ll\; \left\|\mathbf{v}_{t-1}^{(i)}\right\|_2 \, \Delta t,
-\end{equation}
-where $\boldsymbol{\mu}_t^{(i),\star}$ is the ground-truth optimal position and $\mathbf{a}_{t-1}^{(i)}$ is the acceleration vector. This is a zero-cost prediction step (a single in-place tensor addition on the GPU) and corresponds exactly to a constant-velocity motion model. Its effect is most visible on fast-moving content: on frame $t$ the optimizer starts from an already close-to-correct configuration, and the initial rendering loss is an order of magnitude lower than without the prediction. The prediction is only applied from frame $t \geq 2$ onward, since at least two previous frames are needed to form a velocity estimate. It is disabled automatically on the key frame and can be turned off globally via the \texttt{-{}-no-velocity} flag for ablation studies. A naive alternative, re-initializing each frame from the key frame, would still converge, but tracking would have to traverse the entire motion arc every step, which inflates the iteration budget by a large constant factor.
-
-The effect of velocity prediction can be understood quantitatively as follows. Denote by $\mathcal{L}_t^{(0)}$ the rendering loss at iteration $0$ of frame $t$, and by $\mathcal{L}_t^{(0),\text{naive}}, \mathcal{L}_t^{(0),\text{vel}}$ the respective values with and without velocity prediction. Under the first-order motion assumption,
-\begin{equation}
-    \mathcal{L}_t^{(0),\text{vel}} \approx \mathcal{L}_t^{(\star)} + \mathcal{O}(\|\mathbf{a}_{t-1}\|_2^2), \qquad
-    \mathcal{L}_t^{(0),\text{naive}} \approx \mathcal{L}_t^{(\star)} + \mathcal{O}(\|\mathbf{v}_{t-1}\|_2^2),
-\end{equation}
-i.e., the initial loss is bounded by the squared acceleration magnitude rather than the squared velocity magnitude. For a $30$\,fps capture with human-scale motion the acceleration residual is typically sub-pixel, which dramatically shortens the number of iterations needed for convergence.
-
-\paragraph{Loss function.} The tracking loss is identical to the static photometric loss:
-\begin{equation}
-    \mathcal{L}_t = (1 - \lambda_\text{DSSIM}) \, \| \hat{I}_t - I_t \|_1 + \lambda_\text{DSSIM} \, (1 - \text{SSIM}(\hat{I}_t, I_t)) + \lambda_d(t) \cdot \mathcal{L}_\text{depth},
-\end{equation}
-where $I_t$ is the frame-$t$ ground-truth image for the currently sampled camera, and the depth term is optional. The only parameters with non-zero learning rates during tracking are positions, opacity, scale, and rotation. Among these, the positional updates dominate; opacity and scale are mostly used to locally reshape deformable content (e.g., clothing folds) whose geometry varies non-rigidly.
-
-\paragraph{Iteration budget and viewpoint scheduling.} Each tracking frame runs for 500 iterations with the same random-viewpoint-without-replacement scheme as the static trainer. For a capture rig with $N_c$ cameras, this corresponds to approximately $500 / N_c$ gradient updates per camera per frame. The budget was deliberately chosen to keep the tracking cost at roughly $500 / 2000 = 25\%$ of the key-frame cost, matching empirical convergence curves.
-
-\subsubsection{Robustness Mechanisms}
-
-\paragraph{Resume support.} Long captures can run for hours, and GPU jobs occasionally fail. The trainer supports resuming from any frame by loading the PLY of the previous frame (and optionally the frame before that, to re-establish a velocity estimate). When resuming, the exposure parameters are re-instantiated with identity matrices; since the Gaussian positions and colors are already correct, a few iterations of tracking are sufficient to reabsorb any residual exposure mismatch.
-
-\paragraph{Per-frame deterministic seeding.} The random camera sampling is performed at the frame level, so two runs of the same configuration produce byte-identical outputs. This is particularly valuable for reproducibility when comparing design choices, e.g., evaluating the effect of turning velocity prediction on and off.
-
-\paragraph{Optional synthetic scene support.} The same script can ingest either a COLMAP directory or a NeRF-synthetic \texttt{transforms\_train.json}. This unified loader allowed the method to be validated on both fully synthetic rigs (for controlled ablations) and COLMAP-processed captures (for realism testing) without any code changes.
-
-\subsubsection{Why the Method is an Implicit Static--Dynamic Decomposition}
-
-Although no explicit segmentation mask is ever computed, the optimization dynamics produce an emergent partition of the Gaussian set into stationary and moving subsets. A quantitative criterion for classifying primitive $i$ at time $t$ can be written in terms of its cumulative displacement:
-\begin{equation}
-    D_i(T) = \sum_{t=1}^{T-1} \left\| \boldsymbol{\mu}_t^{(i)} - \boldsymbol{\mu}_{t-1}^{(i)} \right\|_2, \qquad
-    \hat{\mathcal{G}}^{\text{static}}(T) = \{i \,:\, D_i(T) < \tau_s\},
-\end{equation}
-where $\tau_s$ is a small threshold proportional to the scene scale. In practice, the distribution of $D_i(T)$ is strongly bimodal: background splats concentrate near $D_i \approx 0$, while splats attached to moving subjects form a long right tail. For intuition, consider two limiting cases:
-\begin{itemize}
-    \item For a splat that sits on the wall behind the moving person, the rendered pixel only changes if the person occludes it, and then only briefly. Averaged over 500 tracking iterations and all cameras, the positional gradient satisfies:
-    \begin{equation}
-        \mathbb{E}\!\left[\nabla_{\boldsymbol{\mu}_i} \mathcal{L}_t\right] \approx \mathbf{0},
-    \end{equation}
-    and the velocity prediction correctly extrapolates its previous (near-zero) velocity, so the splat stays stationary.
-    \item For a splat that sits on the moving person, the rendered pixel is different every frame. The expected positional gradient has a well-defined direction:
-    \begin{equation}
-        \mathbb{E}\!\left[\nabla_{\boldsymbol{\mu}_i} \mathcal{L}_t\right] \;\propto\; -\mathbf{v}_t^{(i)},
-    \end{equation}
-    which drives the splat along its physical motion vector. The velocity prediction provides a useful warm start, and the optimizer quickly locks the splat onto its new location.
-\end{itemize}
-
-This implicit partitioning is the reason the method is called \emph{Dynamic Scene Reconstruction using 3DGS with static--dynamic separation}: the static background is stored implicitly as the set of Gaussians whose positions never change across frames, and the dynamic foreground is the complement. Because the partition is emergent rather than imposed, the method gracefully handles borderline cases (e.g., a chair that is stationary for 90\% of the capture and then is pushed) without any special-case logic.
-
-\begin{figure}[!ht]
-    \begin{center}
-        \fbox{\parbox{0.9\linewidth}{\vspace{4.5cm}\centering\emph{[Placeholder: high-level block diagram of the dynamic reconstruction pipeline. Left: COLMAP produces camera calibration and sparse cloud. Middle: key-frame 3DGS training. Right: sequence of tracking steps, with velocity prediction arrows and frozen-color indicators.]}\vspace{4.5cm}}}
-    \end{center}
-    \caption{Conceptual diagram of the full dynamic reconstruction pipeline, from multi-view video capture to per-frame PLY sequence.}
-    \label{fig:dynamic-pipeline}
+    \caption{The static background and dynamic foreground composited in the merge
+    renderer.}
+    \label{fig:qual-merge}
 \end{figure}
 
 \begin{figure}[!ht]
     \begin{center}
-        \fbox{\parbox{0.9\linewidth}{\vspace{4.5cm}\centering\emph{[Placeholder: grid of six renders at frames $t=0, 5, 10, 15, 20, 25$, showing a moving person in the reconstructed room while the background stays pixel-stable. Ground truth and reconstruction shown side-by-side per frame.]}\vspace{4.5cm}}}
+        \fbox{\parbox{0.85\linewidth}{\vspace{3.5cm}\centering\emph{[Placeholder:
+        emergent partition --- every primitive coloured by the magnitude of its
+        cumulative displacement $D_i$, so the stationary background appears cold and the
+        moving subject warm, recovering a segmentation without any mask.]}\vspace{3.5cm}}}
     \end{center}
-    \caption{Qualitative temporal consistency of the dynamic reconstruction on a sequence with a single moving subject.}
-    \label{fig:dynamic-temporal}
+    \caption{The emergent static--dynamic partition, recovered by thresholding
+    cumulative per-primitive displacement.}
+    \label{fig:qual-partition}
 \end{figure}
-
-\begin{figure}[!ht]
-    \begin{center}
-        \fbox{\parbox{0.9\linewidth}{\vspace{4.5cm}\centering\emph{[Placeholder: ablation of two side-by-side videos/renders of the same tracking frame, with and without linear velocity prediction. The with-prediction variant shows a visibly sharper subject; the without-prediction variant shows temporal lag on the limbs.]}\vspace{4.5cm}}}
-    \end{center}
-    \caption{Qualitative effect of the linear velocity prediction on tracking convergence.}
-    \label{fig:dynamic-velocity-ablation}
-\end{figure}
-
-\begin{figure}[!ht]
-    \begin{center}
-        \fbox{\parbox{0.9\linewidth}{\vspace{4.5cm}\centering\emph{[Placeholder: visualization of the emergent static--dynamic partition. All Gaussians are colored by the L2 norm of their cumulative displacement across the capture. Background splats appear in cold colors (small displacement); the subject's body appears in warm colors.]}\vspace{4.5cm}}}
-    \end{center}
-    \caption{Emergent static--dynamic partition of the Gaussian set obtained as a by-product of tracking.}
-    \label{fig:dynamic-emergent-partition}
-\end{figure}
-
-\section{Dynamic 3DGS Inspection}
-
-In this chapter I will go over the application that I mentioned in Section \ref{sec:point-cloud-inspection}. It was further extended to be able to not only render point cloud, but also static gaussians and the the new dynamic splatting approach.
-
-
-\section{Results / benchmarks}

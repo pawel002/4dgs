@@ -1,0 +1,30 @@
+\begin{tikzpicture}[
+  font=\small,
+  ax/.style={-{Latex[length=2.2mm]}, very thick},
+  cam/.style={draw=black!75, fill=black!10, thick},
+]
+% ============================ Blender convention ============================
+\begin{scope}
+  \node[font=\bfseries] at (0,2.2) {Blender camera};
+  \node[cam, trapezium, trapezium left angle=70, trapezium right angle=70,
+        minimum width=0.9cm, minimum height=0.5cm, rotate=-90] at (0,0) {};
+  \draw[ax, red!70!black]   (0,0) -- (1.4,0)    node[right]{$x$ (right)};
+  \draw[ax, green!55!black] (0,0) -- (0,1.4)    node[above]{$y$ (up)};
+  \draw[ax, blue!65!black]  (0,0) -- (-1.15,-0.75) node[below left]{$-z$ (look)};
+\end{scope}
+
+% ============================ OpenCV convention =============================
+\begin{scope}[shift={(6.4,0)}]
+  \node[font=\bfseries] at (0,2.2) {OpenCV / SfM camera};
+  \node[cam, trapezium, trapezium left angle=70, trapezium right angle=70,
+        minimum width=0.9cm, minimum height=0.5cm, rotate=90] at (0,0) {};
+  \draw[ax, red!70!black]   (0,0) -- (1.4,0)     node[right]{$x$ (right)};
+  \draw[ax, green!55!black] (0,0) -- (0,-1.4)    node[below]{$y$ (down)};
+  \draw[ax, blue!65!black]  (0,0) -- (1.15,0.75) node[above right]{$+z$ (look)};
+\end{scope}
+
+% ============================ reconciliation ================================
+\draw[{Latex[length=2.6mm]}-{Latex[length=2.6mm]}, thick, black!60] (1.9,0.1) -- (4.5,0.1);
+\node[align=center, font=\footnotesize, fill=white, inner sep=1pt] at (3.2,0.1)
+  {$\mathbf{R}_{\text{flip}}=\mathrm{diag}(1,-1,-1)$\\ reconciled on load};
+\end{tikzpicture}

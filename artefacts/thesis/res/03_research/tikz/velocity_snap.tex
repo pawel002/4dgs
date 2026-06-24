@@ -1,0 +1,34 @@
+\begin{tikzpicture}[
+  font=\small,
+  gpt/.style={circle, fill=blue!60!black, inner sep=1.5pt},
+  pred/.style={circle, draw=blue!60!black, fill=white, thick, inner sep=1.5pt},
+  vel/.style={-{Latex[length=2.2mm]}, thick, blue!55!black},
+  snap/.style={-{Latex[length=2.2mm]}, very thick, red!65!black, dashed},
+]
+% ============================ (a) velocity prediction =======================
+\begin{scope}
+  \node[font=\bfseries, anchor=south west] at (-0.3,1.6) {(a) linear velocity prediction};
+  \node[gpt,  label={below:$\boldsymbol{\mu}_{t-2}$}] (a) at (0,0)   {};
+  \node[gpt,  label={below:$\boldsymbol{\mu}_{t-1}$}] (b) at (1.6,0.55) {};
+  \node[pred, label={[blue!55!black]above:$\boldsymbol{\mu}_{t}^{\text{pred}}$}] (c) at (3.2,1.1) {};
+  \draw[vel] (a) -- (b) node[midway, below right, font=\scriptsize]{$\mathbf{v}_{t-1}$};
+  \draw[vel] (b) -- (c) node[midway, below right, font=\scriptsize]{$\mathbf{v}_{t-1}$};
+  \node[gpt, fill=green!45!black, label={[green!40!black]right:$\boldsymbol{\mu}_{t}^{\star}$}] (s) at (3.55,0.75) {};
+  \draw[-{Latex[length=1.6mm]}, green!40!black, thin] (c) -- (s) node[midway, right=1pt, font=\scriptsize]{$\mathcal{O}(\|\mathbf{a}\|)$};
+\end{scope}
+
+% ============================ (b) frustum snap ==============================
+\begin{scope}[shift={(6.6,0)}]
+  \node[font=\bfseries, anchor=south west] at (-0.6,1.6) {(b) snap stray onto hull};
+  % hull boundary
+  \draw[fill=red!10, draw=red!55!black, thick]
+    plot[smooth cycle, tension=0.8] coordinates {(0,1.0) (0.9,0.5) (0.7,-0.55) (0,-0.95) (-0.8,-0.5) (-0.85,0.5)};
+  \node[red!55!black, font=\footnotesize] at (0,0) {hull};
+  % stray gaussian outside the hull
+  \node[pred, label={[blue!55!black]right:stray $\boldsymbol{\mu}_t^{\text{pred}}$}] (g) at (1.9,1.05) {};
+  % nearest boundary point
+  \node[gpt, fill=red!65!black] (h) at (0.78,0.62) {};
+  \draw[snap] (g) -- (h) node[midway, above right=-1pt, font=\scriptsize]{snap};
+  \node[font=\scriptsize, anchor=west] at (1.0,-0.85) {outside $\bigcap_c$frustum $\Rightarrow$ reclaim};
+\end{scope}
+\end{tikzpicture}

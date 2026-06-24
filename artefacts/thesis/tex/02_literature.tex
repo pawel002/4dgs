@@ -184,39 +184,120 @@ where $u_{ij}$ is the observed 2D location of 3D point $X_j$ in image $i$, $\pi$
 \end{figure}
 
 \subsection{3D Gaussian Splatting}
+\label{sec:notation}
 
-3DGS represents a scene as a learnable point cloud of 3D Gaussians $\mathcal{G} = \{g_1, \dots, g_M\}$, where each primitive acts as a soft, semi-transparent ellipsoidal particle with learnable geometric and appearance parameters. The 3DGS framework can be divided into several steps that are presented in the following paragraphs.
+3DGS represents a scene as a learnable point cloud of 3D Gaussians $\mathcal{G} = \{g_1, \dots, g_N\}$, where each primitive acts as a soft, semi-transparent ellipsoidal particle with learnable geometric and appearance parameters. The framework can be divided into several steps, presented in the following paragraphs. Because the remainder of this thesis --- and in particular the temporal method of Chapter~3 --- is notation-heavy, this section also fixes the parameterisation and symbols once, so that later chapters can build on them without re-deriving them.
 
-\subsubsection{Volumetric Parameterisation} 
+\subsubsection{The Gaussian Primitive and its Parameterisation}
 
-Each Gaussian is defined by a mean $\boldsymbol{\mu} \in \mathbb{R}^3$ and a 3D covariance matrix $\mathbf{\Sigma} \in \mathbb{R}^{3\times 3}$. Its contribution at a spatial location $\mathbf{x}$ is the unnormalised Gaussian:
+Each primitive is the tuple
 \begin{equation}
-    G(\mathbf{x}) = \exp\!\left(-\tfrac{1}{2} (\mathbf{x} - \boldsymbol{\mu})^T \mathbf{\Sigma}^{-1} (\mathbf{x} - \boldsymbol{\mu})\right).
+    g_i = \big(\boldsymbol{\mu}_i,\; \mathbf{s}_i,\; \mathbf{q}_i,\; \tilde\sigma_i,\; \mathrm{SH}_i\big),
 \end{equation}
-The covariance is not optimised directly. Instead, it is factorised into a rotation matrix $\mathbf{R}$ built from a unit quaternion $q \in \mathbb{R}^4$ and a diagonal scaling matrix $\mathbf{S}$ built from a log-scale vector $s \in \mathbb{R}^3$:
-\begin{equation}
-    \mathbf{\Sigma} = \mathbf{R}(q)\,\mathbf{S}(s)\,\mathbf{S}(s)^T \mathbf{R}(q)^T.
-\end{equation}
-This factorisation guarantees that $\mathbf{\Sigma}$ remains symmetric positive semi-definite for any $(q, s)$, so no projection step is needed during gradient descent.
+whose components carry the following meaning and storage convention (Figure~\ref{fig:gaussian}).
 
-Each Gaussian additionally carries a pre-activation opacity $\tilde{\sigma}$ (passed through a sigmoid at render time) and a view-dependent colour represented by spherical-harmonic coefficients up to degree $L = 3$. The view-dependent colour at a viewing direction $\mathbf{d} \in \mathbb{S}^2$ is:
-\begin{equation}
-    \mathbf{c}(\mathbf{d}) = \sum_{\ell = 0}^{L} \sum_{m=-\ell}^{\ell} \mathbf{k}_{\ell, m}\, Y_\ell^m(\mathbf{d}),
-\end{equation}
-where $Y_\ell^m$ is the real spherical-harmonic basis and $\mathbf{k}_{\ell, m} \in \mathbb{R}^3$ are the learnable coefficients. Storing only the DC coefficient is equivalent to a purely diffuse (Lambertian) material; higher-order coefficients capture view-dependent effects such as specularities.
+\begin{itemize}
+    \item $\boldsymbol{\mu}_i \in \mathbb{R}^3$ is the \textbf{mean}, the centre of
+    the primitive in world coordinates. When time matters it is written
+    $\boldsymbol{\mu}_i(t)$ or $\boldsymbol{\mu}^{(i)}_t$, the position of primitive
+    $i$ at frame $t$. This is the parameter that motion acts on in Chapter~3.
 
-\subsubsection{Projection and Differentiable Rasterisation.} 
+    \item $\mathbf{s}_i \in \mathbb{R}^3$ is the \textbf{log-scale}. The physical
+    extent along each local axis is its exponential, $\exp(s_{i,k})$; storing the
+    logarithm guarantees a strictly positive scale for any real optimised value, so
+    no positivity constraint is needed after a gradient step. The diagonal scale
+    matrix is $\mathbf{S}_i = \mathrm{diag}\!\big(\exp(s_{i,1}), \exp(s_{i,2}),
+    \exp(s_{i,3})\big)$.
 
-Rendering projects each 3D Gaussian onto the image plane. Given a viewing transformation $\mathbf{W}$ and the Jacobian $\mathbf{J}$ of the local affine approximation of the projective transformation, the 2D projected covariance is:
+    \item $\mathbf{q}_i \in \mathbb{R}^4$ is the \textbf{orientation} quaternion,
+    stored unnormalised and normalised at use, $\hat{\mathbf{q}}_i = \mathbf{q}_i /
+    \|\mathbf{q}_i\|_2$, then mapped to a rotation matrix $\mathbf{R}_i =
+    \mathbf{R}(\hat{\mathbf{q}}_i) \in SO(3)$ by the standard quaternion-to-matrix
+    formula. Scale and rotation together define the $3\times3$ covariance, which is
+    never stored explicitly but recovered as
+    \begin{equation}
+        \boldsymbol{\Sigma}_i = \mathbf{R}_i\, \mathbf{S}_i\, \mathbf{S}_i^{\!\top}\, \mathbf{R}_i^{\!\top}
+        = \mathbf{R}_i\, \mathbf{S}_i^2\, \mathbf{R}_i^{\!\top}.
+        \label{eq:cov}
+    \end{equation}
+    This factorisation is the reason orientation and scale are stored separately
+    rather than as a raw covariance: it keeps $\boldsymbol{\Sigma}_i$ symmetric
+    positive semi-definite by construction, which a freely optimised $3\times3$
+    matrix would not be.
+
+    \item $\tilde\sigma_i \in \mathbb{R}$ is the \textbf{pre-activation opacity}.
+    The rendered opacity is the logistic sigmoid
+    $\sigma_i = \mathrm{sig}(\tilde\sigma_i) = \big(1 + e^{-\tilde\sigma_i}\big)^{-1}
+    \in (0,1)$, again so that any real optimised value yields a valid opacity.
+
+    \item $\mathrm{SH}_i$ is the \textbf{appearance}, a set of spherical-harmonic
+    coefficients $\mathbf{k}_{\ell,m}^{(i)} \in \mathbb{R}^3$ up to band $L$ (here
+    $L = 3$). The view-dependent colour seen from unit direction
+    $\mathbf{d} \in \mathbb{S}^2$ is
+    $\mathbf{c}_i(\mathbf{d}) = \sum_{\ell=0}^{L}\sum_{m=-\ell}^{\ell}
+    \mathbf{k}_{\ell,m}^{(i)} Y_{\ell}^{m}(\mathbf{d})$, with $Y_\ell^m$ the real SH
+    basis. The zeroth band is the diffuse (Lambertian) term and higher bands capture
+    view-dependent effects such as specularities; the diffuse RGB colour recovered
+    from the DC band is
+    \begin{equation}
+        \mathbf{c}_i = \tfrac{1}{2}\mathbf{1} + C_0\, \mathrm{SH}_i^{(0)},
+        \qquad C_0 = \tfrac{1}{2}\sqrt{\tfrac{1}{\pi}} \approx 0.282,
+        \label{eq:sh2rgb}
+    \end{equation}
+    where $\mathbf{1}=(1,1,1)^{\!\top}$ and $C_0$ is the normalisation of the
+    constant SH basis function. Equation~\eqref{eq:sh2rgb} is used both to seed
+    primitive colours from images and to read colours back for rendering and
+    pruning.
+\end{itemize}
+
+\begin{figure}[!ht]
+    \centering
+    \input{res/02_literature/tikz/gaussian_anatomy}
+    \caption{Anatomy of a single primitive (drawn as the 2D projection of the 3D
+    ellipsoid). The mean $\boldsymbol{\mu}_i$ locates it, the rotation
+    $\mathbf{R}(\hat{\mathbf{q}}_i)$ orients it, the exponentials of the log-scales
+    set its axis lengths, and the opacity $\sigma_i$ controls how much it
+    contributes; together scale and rotation form the covariance
+    $\boldsymbol{\Sigma}_i$ of Eq.~\eqref{eq:cov}.}
+    \label{fig:gaussian}
+\end{figure}
+
+The continuous density contributed by primitive $i$ at a world point $\mathbf{x}$ is
+the unnormalised Gaussian
 \begin{equation}
-    \mathbf{\Sigma}' = \mathbf{J}\,\mathbf{W}\,\mathbf{\Sigma}\,\mathbf{W}^T \mathbf{J}^T.
+    G_i(\mathbf{x}) = \exp\!\Big(-\tfrac{1}{2}(\mathbf{x}-\boldsymbol{\mu}_i)^{\!\top}
+    \boldsymbol{\Sigma}_i^{-1} (\mathbf{x}-\boldsymbol{\mu}_i)\Big).
 \end{equation}
 
-The screen is divided into $N \times N$ pixel tiles. Gaussians are culled against the view frustum and depth-sorted tile-by-tile with a GPU radix sort. For every pixel, the final colour is the alpha-blend of the depth-sorted Gaussians overlapping that pixel:
+\subsubsection{Projection and Differentiable Rasterisation}
+
+To form an image, each primitive is projected onto the image plane of a camera with
+viewing transformation $\mathbf{W}$ and the Jacobian $\mathbf{J}$ of the local affine
+approximation of the projective transformation, yielding a 2D Gaussian with covariance
 \begin{equation}
-    C = \sum_{i \in N} \mathbf{c}_i \alpha_i \prod_{j=1}^{i-1} (1 - \alpha_j), \qquad \alpha_i = \sigma_i \cdot G^{2D}(\mathbf{x}_\text{pixel}),
+    \boldsymbol{\Sigma}^{\,2\mathrm{D}}_i = \mathbf{J}\,\mathbf{W}\, \boldsymbol{\Sigma}_i\, \mathbf{W}^{\!\top}\mathbf{J}^{\!\top},
 \end{equation}
-where $G^{2D}$ is the projected 2D Gaussian evaluated at the pixel location and $\sigma_i$ is the Gaussian's opacity. This compositing rule is fully differentiable, gradients flow from the pixel colour back through the depth-sort, the 2D covariance, and ultimately to all optimisable parameters $(\boldsymbol{\mu}, q, s, \tilde{\sigma}, \{\mathbf{k}_{\ell, m}\})$.
+the elliptical-weighted-average (EWA) approximation. The screen is divided into pixel
+tiles; primitives are culled against the view frustum and depth-sorted tile-by-tile
+with a GPU radix sort. The colour of a pixel $\mathbf{p}$ is then the front-to-back
+alpha composite of the depth-sorted primitives that cover it,
+\begin{equation}
+    \hat I(\mathbf{p}) = \sum_{i \in \mathcal{N}(\mathbf{p})} \mathbf{c}_i\, \alpha_i(\mathbf{p})
+    \prod_{j<i}\big(1 - \alpha_j(\mathbf{p})\big),
+    \qquad
+    \alpha_i(\mathbf{p}) = \sigma_i\, G^{\,2\mathrm{D}}_i(\mathbf{p}),
+    \label{eq:alphablend}
+\end{equation}
+where $\mathcal{N}(\mathbf{p})$ is the depth-sorted set of primitives whose footprint
+covers $\mathbf{p}$ and $G^{\,2\mathrm{D}}_i$ is the projected 2D Gaussian evaluated at
+$\mathbf{p}$. This compositing rule is fully differentiable: gradients flow from the
+pixel colour back through the depth-sort and the 2D covariance to every optimisable
+parameter $(\boldsymbol{\mu}_i, \mathbf{q}_i, \mathbf{s}_i, \tilde\sigma_i, \mathrm{SH}_i)$.
+
+Finally, two indexing conventions are used throughout the thesis: $t \in \{0,\dots,F-1\}$
+indexes the $F$ temporal frames and $c \in \{1,\dots,C\}$ indexes the $C$ cameras of a
+capture, $k$ indexes a global optimiser step, and a hat ($\hat I$) denotes a rendered
+quantity as opposed to an observed one ($I$).
 
 \subsubsection{Adaptive Density Control} 
 

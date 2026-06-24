@@ -1,0 +1,40 @@
+\begin{tikzpicture}[
+  font=\small,
+  brace/.style={decorate, decoration={brace, amplitude=5pt, raise=3pt}, thick},
+  trans/.style={-{Latex[length=2.0mm]}, thick, red!65!black},
+]
+% --- frame-0 (initial) block ------------------------------------------------
+\fill[blue!22, draw=blue!60!black, thick] (0,0) rectangle (5,0.9);
+\node[align=center] at (2.5,0.45) {\textbf{frame 0}\\ \footnotesize initial fit};
+
+% --- tracking blocks --------------------------------------------------------
+\foreach \i/\xa in {1/5, 2/6.3, 3/7.6, 4/8.9, 5/10.2}{
+  \fill[green!16, draw=green!55!black, thick] (\xa,0) rectangle ($(\xa,0)+(1.3,0.9)$);
+  \node[font=\footnotesize] at ($(\xa,0)+(0.65,0.45)$) {$\;t{=}\i$};
+}
+\node[font=\footnotesize] at (12.1,0.45) {$\cdots$};
+\fill[green!16, draw=green!55!black, thick] (12.4,0) rectangle (13.7,0.9);
+\node[font=\footnotesize] at (13.05,0.45) {$t{=}F{-}1$};
+
+% --- step axis --------------------------------------------------------------
+\draw[-{Latex[length=2mm]}, thick] (-0.1,-0.35) -- (14.0,-0.35) node[right, font=\footnotesize] {step};
+\foreach \x/\lab in {0/0, 5/$N_0$, 6.3/{$N_0{+}N_t$}}{
+  \draw (\x,-0.27) -- (\x,-0.43);
+}
+\node[font=\scriptsize, anchor=north] at (0,-0.5)   {$0$};
+\node[font=\scriptsize, anchor=north] at (5,-0.5)   {$N_0$};
+\node[font=\scriptsize, anchor=north] at (6.3,-0.62){$N_0{+}N_t$};
+
+% --- braces -----------------------------------------------------------------
+\draw[brace] (0,0.9) -- (5,0.9) node[midway, above=7pt, align=center, font=\footnotesize]
+  {densification \emph{on}; count fixed at step $N_0$};
+\draw[brace] (5,0.9) -- (13.7,0.9) node[midway, above=7pt, align=center, font=\footnotesize]
+  {tracking: count \& colour frozen, $N_t$ steps each};
+
+% --- frame transitions: velocity + snap -------------------------------------
+\foreach \x in {5,6.3,7.6,8.9,10.2,12.4}{
+  \draw[trans] (\x,-1.25) -- (\x,-0.05);
+}
+\node[red!65!black, font=\footnotesize, anchor=north, align=center] at (7.5,-1.3)
+  {at each transition: velocity prediction $+$ frustum snap};
+\end{tikzpicture}

@@ -23,7 +23,10 @@
 
 \usepackage{tikz}
 \usepackage{pgfplots}
-\usetikzlibrary{shapes.geometric,arrows.meta,decorations.pathreplacing,positioning} 
+\pgfplotsset{compat=1.17}
+\usetikzlibrary{shapes.geometric,arrows.meta,decorations.pathreplacing,positioning,calc,fit,backgrounds}
+\usepackage{booktabs}                         % Profesjonalne linie w tabelach
+\usepackage{subcaption}                       % Podrysunki (subfigure)
 \tikzstyle{every picture}+=[remember picture]
 \tikzstyle{na} = [baseline=-.5ex]
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
