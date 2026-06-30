@@ -71,8 +71,10 @@ static background and a dynamic foreground, and reconstruct each with the machin
 best suited to it.} A synthetic environment is rendered in Blender, which in the
 same pass exports mathematically exact camera poses and intrinsics, so the
 Structure-from-Motion stage that a real capture would require is removed entirely.
-The background is reconstructed once as an ordinary static Gaussian field. The
-foreground is reconstructed as one Gaussian cloud per video frame by a custom
+The background is reconstructed once as an ordinary static Gaussian field. The foreground is
+first isolated from the static room by a \emph{model-free} background subtraction --- no
+segmentation network is trained or run (Section~\ref{sec:bgsub}) --- and is then
+reconstructed as one Gaussian cloud per video frame by a custom
 method, \texttt{temporal-splatfacto}, which fits a single dense cloud on the first
 frame and then \emph{tracks} that one cloud through the rest of the sequence under a
 fixed primitive count and frozen appearance. A dedicated real-time renderer
@@ -86,9 +88,10 @@ Figure~\ref{fig:pipeline}.
     \resizebox{\textwidth}{!}{\input{res/03_research/tikz/pipeline}}
     \caption{End-to-end pipeline. Blender renders the imagery and exports exact
     poses. The static background is reconstructed once with \textsc{splatfacto};
-    the dynamic foreground is reconstructed per frame with
-    \textsc{temporal-splatfacto} (visual-hull seed $\to$ dense frame-0 fit $\to$
-    constrained per-frame tracking). The per-frame clouds and the background are
+    the dynamic foreground is segmented from the room by a model-free background
+    subtraction and reconstructed per frame with
+    \textsc{temporal-splatfacto} (background subtraction $\to$ visual-hull seed $\to$
+    dense frame-0 fit $\to$ constrained per-frame tracking). The per-frame clouds and the background are
     recombined by the merge renderer, and the per-frame sequence is compressed in a
     temporal-frequency basis.}
     \label{fig:pipeline}
@@ -410,19 +413,93 @@ the rigid scene --- walls, floor, ceiling, furniture, stationary objects --- and
 reconstructed once as an ordinary Gaussian field; the dynamic component is the moving
 subject and is reconstructed per frame.
 
-\paragraph{Two routes to the partition.} An \emph{explicit} decomposition would first
-segment the imagery with a vision model, label each region static or dynamic, and
-reconstruct each separately. The drawback is that it couples the method's accuracy to
-that of an external segmenter, which must itself be trained, may fail on the
-deforming boundaries of a moving subject, and introduces a dependency the rest of the
-pipeline would inherit. The route taken here is instead an \emph{implicit}
-decomposition that emerges from the optimization itself, with no mask ever computed.
-A single shared cloud is fit on the first frame, and each subsequent frame is
-reconstructed by perturbing only those primitives that must move to explain the new
-observations. The mechanism is visible directly in the gradient
-(Figure~\ref{fig:decomp}): a primitive on a stationary wall projects to a pixel whose
-value does not change from frame to frame (except briefly when the subject occludes
-it), so its expected positional gradient is essentially zero,
+\subsubsection{Model-Free Foreground Segmentation}
+\label{sec:bgsub}
+
+Both the visual-hull seed of Section~\ref{sec:hull} and the silhouette supervision of
+Section~\ref{sec:masking} require the moving subject to be presented to the foreground
+optimizer \emph{on a black background}: each recovers the subject's silhouette in a view by
+thresholding image brightness, which is only meaningful once everything that is \emph{not}
+the subject has been set to black. The foreground branch must therefore be handed images in
+which the room has been removed and only the subject remains. The obvious way to obtain them
+is to run a learned segmentation network, but that re-introduces precisely the kind of
+external, separately-trained dependency the pose pipeline of Section~\ref{sec:poses} was at
+pains to eliminate: a segmenter must itself be trained, can fail on the thin or deforming
+boundaries of a moving subject, and couples the reconstruction's accuracy to a component
+that lives outside it.
+
+The fixed-camera rig makes a learned segmenter unnecessary. Because every camera is
+stationary, the background it observes is \emph{identical} in every frame --- only the
+subject moves. A single photograph of the \emph{empty room}, taken by each camera before the
+subject enters, is therefore a complete model of that camera's background, and the subject in
+any later frame is exactly \emph{wherever that frame differs from the empty-room photograph}.
+This is classical background subtraction, and for a static rig under the deterministic
+lighting of the synthetic environment (Section~\ref{sec:data}) it is essentially exact. It is
+triggered by one convention: the frame indexed $0$ of each camera is reserved for the
+empty-room \emph{background plate} $I^{\mathrm{bg}}_c$. When the plate is present the
+segmentation runs; when it is absent the images are taken to be already segmented and the
+step is skipped.
+
+Concretely, for camera $c$ and reconstruction frame $t$ the per-pixel change magnitude
+against that camera's plate is the mean absolute colour difference,
+\begin{equation}
+    d_{c,t}(\mathbf{u}) = \tfrac{1}{3}\textstyle\sum_{k} \big| I_{c,t,k}(\mathbf{u}) - I^{\mathrm{bg}}_{c,k}(\mathbf{u}) \big|,
+\end{equation}
+where the sum runs over the three colour channels $k$ at pixel $\mathbf{u}$, and the
+foreground silhouette is its threshold,
+\begin{equation}
+    \mathcal{S}_{c,t}(\mathbf{u}) = \big[\, d_{c,t}(\mathbf{u}) > \tau_s \,\big],
+    \qquad \tau_s = 0.1,
+    \label{eq:bgsub}
+\end{equation}
+with $\tau_s$ a small change threshold and the bracket the Iverson bracket (one where the
+predicate holds, zero otherwise). A morphological \emph{opening} --- an erosion followed by a
+dilation --- removes isolated speckle such as anti-aliasing along edges and the faint flicker
+of indirect light on the static surfaces, and a final few-pixel dilation keeps the soft
+object boundary from being clipped. The image actually handed to the optimizer is the
+original frame with everything outside the silhouette set to black,
+\begin{equation}
+    \tilde I_{c,t} = I_{c,t} \odot \mathcal{S}_{c,t},
+    \label{eq:segmented}
+\end{equation}
+so that every unchanged pixel becomes exactly the black background the rest of the foreground
+pipeline assumes (Figure~\ref{fig:bgsub}). The plate $I^{\mathrm{bg}}_c$ has done its work
+once the silhouettes are computed and is \emph{not} itself a reconstruction frame: with a
+plate plus $F$ subject frames the reconstruction still has $F$ frames, and the step schedule
+of Section~\ref{sec:temporal} is sized accordingly.
+
+\begin{figure}[!ht]
+    \centering
+    \resizebox{0.96\textwidth}{!}{\input{res/03_research/tikz/bg_subtract}}
+    \caption{Model-free foreground segmentation by background subtraction. Each fixed camera
+    contributes an empty-room \emph{background plate} (frame $0$); subtracting it from a later
+    frame and thresholding the change magnitude (Eq.~\eqref{eq:bgsub}) yields the subject's
+    silhouette with no learned model. Everything outside the silhouette is set to black
+    (Eq.~\eqref{eq:segmented}), producing exactly the on-black input the visual hull and the
+    silhouette loss expect. The faint cast shadow that leaks into a single view is removed by
+    the multi-view hull intersection.}
+    \label{fig:bgsub}
+\end{figure}
+
+\paragraph{Shadows and the multi-view safeguard.} Background subtraction attributes
+\emph{any} image change to the subject, including the soft shadow it casts and the indirect
+light it bounces onto nearby static surfaces, so a single camera's silhouette can bleed a
+little beyond the true object. Two mechanisms keep this benign. The morphological opening
+removes the thin, low-contrast shadow fringe directly. More importantly, the per-view
+silhouettes are never trusted on their own: the visual hull of Section~\ref{sec:hull} retains
+only voxels that fall inside the foreground of \emph{every} camera, and a cast shadow on the
+floor that one camera registers as foreground is not seen as foreground by the others, so it
+is carved away by the same silhouette intersection that builds the seed. The threshold
+$\tau_s$ can be raised if low-contrast leakage persists.
+
+\paragraph{The emergent cloud partition.} The background subtraction separates foreground
+from background \emph{in image space}; the partition of the reconstructed \emph{primitives}
+into the static set $\mathcal{G}^{\text{static}}$ and the dynamic set
+$\mathcal{G}^{\text{dynamic}}_t$ then follows from the optimization itself, with no further
+labelling. The mechanism is visible directly in the gradient (Figure~\ref{fig:decomp}): a
+primitive on a stationary surface projects to a pixel whose value does not change from frame
+to frame (except briefly when the subject occludes it), so its expected positional gradient
+is essentially zero,
 \begin{equation}
     g_i \in \mathcal{G}^{\text{static}}:\quad \mathbb{E}\!\big[\nabla_{\boldsymbol{\mu}_i}\mathcal{L}_t\big] \approx \mathbf{0},
 \end{equation}
@@ -432,13 +509,14 @@ opposing the local error, driving it along the subject's motion,
 \begin{equation}
     g_i \in \mathcal{G}^{\text{dynamic}}_t:\quad \mathbb{E}\!\big[\nabla_{\boldsymbol{\mu}_i}\mathcal{L}_t\big] \;\propto\; -\,\mathbf{v}^{(i)}_t.
 \end{equation}
-No external label is needed: the loss landscape itself partitions the cloud. A useful
-empirical consequence is that the partition can be \emph{read off} after the fact by
-thresholding each primitive's cumulative displacement,
+No \emph{learned} segmenter is needed anywhere in this chain: a per-pixel image difference
+supplies the foreground silhouette, and the loss landscape itself partitions the
+reconstructed cloud. A useful empirical consequence is that the partition can also be
+\emph{read off} after the fact by thresholding each primitive's cumulative displacement,
 $D_i = \sum_{t} \|\boldsymbol{\mu}_i(t) - \boldsymbol{\mu}_i(t-1)\|_2$, whose
 distribution over the cloud is strongly bimodal --- a tight peak near zero for the
-background and a long tail for the subject --- so a single threshold cleanly recovers
-the moving set without any segmentation having been performed.
+stationary parts and a long tail for the moving subject --- so a single threshold cleanly
+recovers the moving set, again without any learned segmentation having been performed.
 
 \begin{figure}[!ht]
     \centering
@@ -453,8 +531,9 @@ the moving set without any segmentation having been performed.
 
 The two components are reconstructed independently and recombined only at render time
 (Section~\ref{sec:merge}). During the optimization of the foreground, the background
-is not present at all: the subject is fit against a black background, so the two
-components never compete for the same pixels and never interfere. This separation is
+is not present at all: the subject is fit against the black background produced by the
+segmentation of Eq.~\eqref{eq:segmented}, so the two components never compete for the same
+pixels and never interfere. This separation is
 what allows the foreground method to make the aggressive count- and colour-freezing
 assumptions of the next section without those assumptions ever being applied to the
 much larger and structurally different background.

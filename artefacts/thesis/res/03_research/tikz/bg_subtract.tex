@@ -1,0 +1,61 @@
+\begin{tikzpicture}[
+  font=\small,
+  imgf/.style={draw=black!55, thick, rounded corners=1.5pt, minimum width=2.4cm, minimum height=1.5cm, inner sep=0pt},
+  lbl/.style={font=\footnotesize, align=center},
+  ar/.style={-{Latex[length=2.4mm]}, thick, draw=black!70},
+  furn/.style={fill=gray!45},
+  obj/.style={fill=red!65!black, draw=red!40!black, very thin},
+  combine/.style={circle, draw=black!70, thick, inner sep=1.2pt, font=\footnotesize},
+]
+% ---------- input 1: empty-room background plate (frame 0) ----------
+\node[imgf, fill=blue!5] (plate) at (0,1.25) {};
+\begin{scope}
+  \clip (plate.south west) rectangle (plate.north east);
+  \begin{scope}[shift={(plate.center)}]
+    \fill[furn] (-0.95,-0.45) rectangle (-0.45,0.05);
+    \fill[furn] (0.45,-0.55) rectangle (0.95,0.2);
+  \end{scope}
+\end{scope}
+\node[lbl, above=1pt of plate] {empty-room plate $I^{\mathrm{bg}}_c$\\ (frame $0$)};
+
+% ---------- input 2: object frame ----------
+\node[imgf, fill=blue!5] (frame) at (0,-1.25) {};
+\begin{scope}
+  \clip (frame.south west) rectangle (frame.north east);
+  \begin{scope}[shift={(frame.center)}]
+    \fill[furn] (-0.95,-0.45) rectangle (-0.45,0.05);
+    \fill[furn] (0.45,-0.55) rectangle (0.95,0.2);
+    \fill[gray!35] (-0.05,-0.62) ellipse (0.45 and 0.1); % faint cast shadow
+    \fill[obj] plot[smooth cycle, tension=0.7] coordinates {(0.07,0.5) (0.35,0.1) (0.28,-0.4) (-0.05,-0.55) (-0.34,-0.18) (-0.28,0.32)};
+  \end{scope}
+\end{scope}
+\node[lbl, below=1pt of frame] {object frame $I_{c,t}$};
+
+% ---------- subtraction ----------
+\node[combine] (minus) at (2.2,0) {$-$};
+\draw[ar] (plate.east) to[out=0,in=120]  (minus);
+\draw[ar] (frame.east) to[out=0,in=-120] (minus);
+
+% ---------- change magnitude ----------
+\node[imgf, fill=black!90] (diff) at (5.0,0) {};
+\begin{scope}
+  \clip (diff.south west) rectangle (diff.north east);
+  \begin{scope}[shift={(diff.center)}]
+    \fill[gray!22] (-0.05,-0.62) ellipse (0.45 and 0.1); % residual shadow change
+    \fill[white] plot[smooth cycle, tension=0.7] coordinates {(0.07,0.5) (0.35,0.1) (0.28,-0.4) (-0.05,-0.55) (-0.34,-0.18) (-0.28,0.32)};
+  \end{scope}
+\end{scope}
+\node[lbl, below=2pt of diff] {change magnitude\\ $d_{c,t}=\tfrac13\sum_k|I_{c,t,k}-I^{\mathrm{bg}}_{c,k}|$};
+\draw[ar] (minus) -- (diff);
+
+% ---------- segmented input ----------
+\node[imgf, fill=black!90] (seg) at (9.4,0) {};
+\begin{scope}
+  \clip (seg.south west) rectangle (seg.north east);
+  \begin{scope}[shift={(seg.center)}]
+    \fill[obj] plot[smooth cycle, tension=0.7] coordinates {(0.07,0.5) (0.35,0.1) (0.28,-0.4) (-0.05,-0.55) (-0.34,-0.18) (-0.28,0.32)};
+  \end{scope}
+\end{scope}
+\node[lbl, below=2pt of seg] {segmented input\\ $\tilde I_{c,t}=I_{c,t}\odot\mathcal{S}_{c,t}$};
+\draw[ar] (diff) -- (seg) node[midway, above, lbl] {threshold $\tau_s$,\\ open\,/\,dilate,\\ black out};
+\end{tikzpicture}

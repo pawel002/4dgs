@@ -9,23 +9,25 @@
 % --- source -----------------------------------------------------------------
 \node[src]  (bl)    at (0,0)       {Blender scene\\ \texttt{bpy} render \& pose export};
 % --- data products ----------------------------------------------------------
-\node[data] (vid)   at (3.8,1.9)   {Multi-view video\\ $C$ static cams $\times\,F$ frames};
-\node[data] (bg)    at (3.8,-1.9)  {Background\\ imagery};
+\node[data] (vid)   at (3.6,1.9)   {Multi-view video\\ $C$ static cams $\times\,F$ frames\\ ($+$ empty-room plate)};
+\node[data] (bg)    at (3.6,-1.9)  {Background\\ imagery};
 % --- dynamic (temporal) track -----------------------------------------------
-\node[proc] (hull)  at (7.4,1.9)   {Visual-hull\\ initialization};
-\node[proc] (f0)    at (10.8,1.9)  {Frame-0\\ dense fit};
-\node[proc] (tr)    at (14.2,1.9)  {Per-frame tracking\\ velocity $+$ snap};
-\node[data] (ply)   at (17.6,1.9)  {Per-frame\\ PLY sequence};
+\node[proc] (seg)   at (6.9,1.9)   {Background\\ subtraction\\ (no seg.\ model)};
+\node[proc] (hull)  at (10.2,1.9)  {Visual-hull\\ initialization};
+\node[proc] (f0)    at (13.5,1.9)  {Frame-0\\ dense fit};
+\node[proc] (tr)    at (16.8,1.9)  {Per-frame tracking\\ velocity $+$ snap};
+\node[data] (ply)   at (20.1,1.9)  {Per-frame\\ PLY sequence};
 % --- static (background) track ----------------------------------------------
-\node[proc] (splat) at (7.4,-1.9)  {\textsc{splatfacto}\\ optimization};
-\node[data] (bgp)   at (10.8,-1.9) {Background\\ PLY};
+\node[proc] (splat) at (6.9,-1.9)  {\textsc{splatfacto}\\ optimization};
+\node[data] (bgp)   at (10.2,-1.9) {Background\\ PLY};
 % --- consumers --------------------------------------------------------------
-\node[proc] (comp)  at (17.6,4.4)  {DCT temporal\\ compression};
-\node[out]  (mrg)   at (21.3,0.0)  {Merge renderer\\ (\textsc{viser})\\ play / loop / step};
+\node[proc] (comp)  at (20.1,4.4)  {DCT temporal\\ compression};
+\node[out]  (mrg)   at (23.8,0.0)  {Merge renderer\\ (\textsc{viser})\\ play / loop / step};
 % --- edges ------------------------------------------------------------------
 \draw[ar] (bl) to[out=38,in=180]  (vid.west);
 \draw[ar] (bl) to[out=-38,in=180] (bg.west);
-\draw[ar] (vid)   -- (hull);
+\draw[ar] (vid)   -- (seg);
+\draw[ar] (seg)   -- (hull);
 \draw[ar] (hull)  -- (f0);
 \draw[ar] (f0)    -- (tr);
 \draw[ar] (tr)    -- (ply);
@@ -35,6 +37,6 @@
 \draw[ar] (ply.east) to[out=0,in=115]  (mrg.north);
 \draw[ar] (bgp.east) to[out=0,in=-115] (mrg.south);
 % --- track labels -----------------------------------------------------------
-\node[blue!55!black, font=\footnotesize\bfseries]   at (10.8,3.15)  {dynamic foreground (\textsc{temporal-splatfacto})};
-\node[orange!70!black, font=\footnotesize\bfseries] at (9.1,-3.15)  {static background};
+\node[blue!55!black, font=\footnotesize\bfseries]   at (13.5,3.2)  {dynamic foreground (\textsc{temporal-splatfacto})};
+\node[orange!70!black, font=\footnotesize\bfseries] at (8.5,-3.15) {static background};
 \end{tikzpicture}
