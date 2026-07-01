@@ -66,9 +66,7 @@ mapping a spatial location $\mathbf{x}$ and a viewing direction $\mathbf{d}$ to 
 \begin{equation}
     \hat{C}(\mathbf{r}) = \sum_{i=1}^{N} T_i\,\bigl(1 - e^{-\sigma_i \delta_i}\bigr)\, \mathbf{c}_i, \qquad T_i = \exp\!\left(-\sum_{j=1}^{i-1} \sigma_j \delta_j\right),
 \end{equation}
-where $\delta_i$ is the distance between consecutive samples and $T_i$ is the accumulated transmittance up to sample $i$. The optimisation minimises the squared error between the rendered and ground-truth pixel colours.
-
-A critical implementation detail is the \emph{positional encoding}: the raw 5D coordinate is mapped through a bank of sinusoidal functions of geometrically increasing frequency before being fed to the MLP. Without this encoding the network struggles to represent high-frequency detail, producing blurry reconstructions. With it, NeRF can render photorealistic novel views that capture view-dependent effects (specular highlights, semi-transparency) far beyond the reach of point-cloud-based methods. The cost is also significant, ray-marching requires hundreds of MLP evaluations per pixel, and training a single scene takes on the order of a day on a high-end GPU.
+where $\delta_i$ is the distance between consecutive samples and $T_i$ is the accumulated transmittance up to sample $i$. The optimisation minimises the squared error between the rendered and ground-truth pixel colours. A critical implementation detail is the \emph{positional encoding}: the raw 5D coordinate is mapped through a bank of sinusoidal functions of geometrically increasing frequency before being fed to the MLP. Without this encoding the network struggles to represent high-frequency detail, producing blurry reconstructions. With it, NeRF can render photorealistic novel views that capture view-dependent effects (specular highlights, semi-transparency) far beyond the reach of point-cloud-based methods. The cost is also significant, ray-marching requires hundreds of MLP evaluations per pixel, and training a single scene takes on the order of a day on a high-end GPU.
 
 \begin{figure}[!ht]
     \begin{center}
