@@ -1,6 +1,7 @@
 \chapter{Literature Review and Theoretical Foundations}
+\label{ch:literature}
 
-The reconstruction of three-dimensional environments from two-dimensional observations has been studied since the early 1980s, and its evolution can be read as a sequence of paradigm shifts. First came the geometric era, in which reconstruction was a purely numerical exercise on matched pixel pairs. Then came the implicit-neural era, which replaced discrete geometry with continuous functions parametrised by deep networks. Finally we arrive at the explicit radiance-field era, which reinstated explicit primitives while preserving differentiability. The method developed in this thesis lives at the very end of this chain and, additionally, at the intersection with a fourth, currently active front, the extension of radiance-field methods to temporally varying scenes. This chapter reviews the four fronts in turn, giving extra weight to 3D Gaussian Splatting (the immediate ancestor of the proposed method) and to the small but growing body of work on four-dimensional radiance fields (the direct comparison baseline), and closes with the formal mathematical background that Chapter~3 will build upon.
+The reconstruction of three-dimensional environments from two-dimensional observations has been studied since the early 1980s, and its evolution can be read as a sequence of paradigm shifts. First came the geometric era, in which reconstruction was a purely numerical exercise on matched pixel pairs. Then came the implicit-neural era, which replaced discrete geometry with continuous functions parametrised by deep networks. Finally we arrive at the explicit radiance-field era, which reinstated explicit primitives while preserving differentiability. The method developed in this thesis lives at the very end of this chain and, additionally, at the intersection with a fourth, currently active front, the extension of radiance-field methods to temporally varying scenes. This chapter reviews the four fronts in turn, giving extra weight to 3DGS (the immediate ancestor of the proposed method) and to the small but growing body of work on four-dimensional radiance fields (the direct comparison baseline), and closes with the formal mathematical background that Chapter~\ref{ch:research} will build upon.
 
 \section{Geometric Foundations: Structure from Motion}
 
@@ -41,7 +42,7 @@ Sch\"{o}nberger and Frahm \cite{schoenberger2016sfm} revisited the incremental S
     \item Mature feature-matching stage that gracefully degrades from exhaustive matching to vocabulary-tree-based matching as the image count grows.
 \end{itemize}
 
-COLMAP remains the de facto standard initialisation stage for every modern radiance-field method: NeRF, Instant-NGP, and 3DGS all consume COLMAP output natively. This is also its role in the present thesis: COLMAP produces the sparse point cloud and the camera extrinsics that seed the Gaussian Splatting optimiser. Its limitation, however, is structural: its output is a discrete point cloud, and no matter how dense, a point cloud cannot model continuous surfaces or view-dependent shading without substantial post-processing. Closing that gap is precisely what radiance-field methods exist for.
+COLMAP remains the standard initialisation stage for every modern radiance-field method: NeRF, Instant-NGP, and 3DGS all consume COLMAP output natively. This is also its role in the present thesis. COLMAP produces the sparse point cloud and the camera extrinsics that seed the Gaussian Splatting optimiser. Its limitation, however, is structural, its output is a discrete point cloud, and no matter how dense, a point cloud cannot model continuous surfaces or view-dependent shading without substantial post-processing. Closing that gap is precisely what radiance-field methods exist for.
 
 \section{The Neural Shift: Implicit Representations}
 
@@ -67,7 +68,7 @@ mapping a spatial location $\mathbf{x}$ and a viewing direction $\mathbf{d}$ to 
 \end{equation}
 where $\delta_i$ is the distance between consecutive samples and $T_i$ is the accumulated transmittance up to sample $i$. The optimisation minimises the squared error between the rendered and ground-truth pixel colours.
 
-A critical implementation detail is the \emph{positional encoding}: the raw 5D coordinate is mapped through a bank of sinusoidal functions of geometrically increasing frequency before being fed to the MLP. Without this encoding the network struggles to represent high-frequency detail, producing blurry reconstructions. With it, NeRF can render photorealistic novel views that capture view-dependent effects (specular highlights, semi-transparency) far beyond the reach of point-cloud-based methods. The cost is also significant: ray-marching requires hundreds of MLP evaluations per pixel, and training a single scene takes on the order of a day on a high-end GPU.
+A critical implementation detail is the \emph{positional encoding}: the raw 5D coordinate is mapped through a bank of sinusoidal functions of geometrically increasing frequency before being fed to the MLP. Without this encoding the network struggles to represent high-frequency detail, producing blurry reconstructions. With it, NeRF can render photorealistic novel views that capture view-dependent effects (specular highlights, semi-transparency) far beyond the reach of point-cloud-based methods. The cost is also significant, ray-marching requires hundreds of MLP evaluations per pixel, and training a single scene takes on the order of a day on a high-end GPU.
 
 \begin{figure}[!ht]
     \begin{center}
@@ -87,9 +88,9 @@ Instant-NGP spawned a small family of hybrid methods (DVGO, TensoRF, Plenoxels),
 
 Kerbl et al.~\cite{kerbl2023} introduced a paradigm shift by removing the neural network (MLP) entirely from the radiance field equation. Instead of querying a black-box coordinate network, the scene is represented explicitly as an unstructured set of millions of 3D Gaussians. Each Gaussian carries a set of learned parameters: a 3D position, an opacity value, a 3D covariance matrix (stored efficiently as a scale and rotation vector), and view-dependent color. To handle complex lighting and specular reflections without heavy computation, this color is encoded using spherical-harmonic (SH) coefficients, allowing the splats to smoothly change appearance based on the camera angle. 
 
-Rendering is handled not by computationally expensive volumetric ray-marching (which would be the obvious choice given that we are talking about actual 3D objects), but by \emph{splatting}. Each 3D Gaussian is mathematically projected onto the 2D image plane, and their resulting 2D projections are blended together in depth-sorted order via a tile-based rasterizer. Because this approach relies on the same fundamental projection and alpha-blending operations that GPU rasterization pipelines have been built around since the mid-1990s, the rendering process is radically faster than NeRF. The result is a system that, under the exact same training budget, matches or exceeds NeRF's visual fidelity while rendering at over $100$,FPS on standard consumer hardware. Perhaps equally important is the explicit nature of the representation: every single Gaussian has an interpretable spatial footprint. The entire optimized scene can be serialized as a standard, single PLY file, making it directly compatible with existing 3D software suites and incredibly easy to inspect visually. 
+Rendering is handled not by computationally expensive volumetric ray-marching (which would be the obvious choice given that we are talking about actual 3D objects), but by \emph{splatting}. Each 3D Gaussian is mathematically projected onto the 2D image plane, and their resulting 2D projections are blended together in depth-sorted order via a tile-based rasterizer. Because this approach relies on the same fundamental projection and alpha-blending operations that GPU rasterization pipelines have been built around since the mid-1990s, the rendering process is radically faster than NeRF. The result is a system that, under the exact same training budget, matches or exceeds NeRF's visual fidelity while rendering at over $100$FPS on standard consumer hardware. Perhaps equally important is the explicit nature of the representation, every single Gaussian has an interpretable spatial footprint. The entire optimized scene can be serialized as a standard, single PLY file, making it directly compatible with existing 3D software suites and incredibly easy to inspect visually. 
 
-However, this explicit structure requires a more convoluted training procedure than continuous gradient descent on a compact MLP. As visualized in Figure~\ref{fig:gaussians-2}, the optimization involves a dynamic geometry-refinement process. The system periodically assesses the scene, executing adaptive densification to split or clone Gaussians in under-reconstructed regions, resetting opacity to prevent local minima, and pruning transparent or overly large splats. Despite its complexity, the numerical dynamics of this discrete structural optimization are well-understood, highly stable, and reproducible.
+However, this explicit structure requires a more convoluted training procedure than continuous gradient descent on a compact MLP. As visualized in Figure~\ref{fig:gaussians-1}, the optimization involves a dynamic geometry-refinement process. The system periodically assesses the scene, executing adaptive densification to split or clone Gaussians in under-reconstructed regions, resetting opacity to prevent local minima, and pruning transparent or overly large splats. Despite its complexity, the numerical dynamics of this discrete structural optimization are well-understood, highly stable, and reproducible.
 
 \begin{figure}[!ht]
     \begin{center}
@@ -114,6 +115,7 @@ Because of these massive advantages in speed and interpretability, 3DGS has rapi
 \newpage
 
 \section{Dynamic and Temporal Scene Representations}
+\label{sec:dynamic}
 
 Extending radiance fields to dynamic scenes is a substantially more recent idea than static reconstruction, and the literature on this topic is correspondingly less extensive. Existing methods fall broadly into three families, each of which inherits a different parent static method.
 
@@ -123,57 +125,50 @@ The earliest family of dynamic neural-rendering methods extends NeRF with an aux
 \begin{equation}
     F_\theta^\text{dynamic}(\mathbf{x}, t, \mathbf{d}) = F_\theta^\text{canonical}\bigl(\mathbf{x} + \Psi_\phi(\mathbf{x}, t),\, \mathbf{d}\bigr).
 \end{equation}
-Nerfies \cite{park2021nerfies} refines this idea with a dedicated temporal regularisation to handle non-rigid human motion from a monocular camera. Both approaches share a common limitation: they inherit NeRF's per-ray cost, multiplied now by an additional MLP evaluation per sample, which makes the per-frame optimisation extremely slow. They are also structurally unsuitable for static-camera multi-view captures with long durations, since the deformation MLP must memorise the trajectory of every spatial location for the entire sequence.
+Nerfies \cite{park2021nerfies} refines this idea with a dedicated temporal regularisation to handle non-rigid human motion from a monocular camera. Both approaches share a common limitation, they inherit NeRF's per-ray cost, multiplied now by an additional MLP evaluation per sample, which makes the per-frame optimisation extremely slow. They are also structurally unsuitable for static-camera multi-view captures with long durations, since the deformation MLP must memorise the trajectory of every spatial location for the entire sequence.
 
 \subsection{Dynamic Extensions of 3D Gaussian Splatting}
 
 \noindent
 Following the widespread adoption of 3DGS, three main temporal extensions have emerged. 
 
-\paragraph{Deformable 3D Gaussians.} Yang et al.~\cite{yang2024deformable} mirror the D-NeRF recipe: a canonical Gaussian set $\mathcal{G}^\text{canonical}$ is augmented with a small deformation MLP $\Psi_\phi$ that, at every time $t$, outputs a per-Gaussian displacement of position, scale, and rotation:
+\paragraph{Deformable 3D Gaussians.} Yang et al.~\cite{yang2024deformable} mirror the D-NeRF recipe, a canonical Gaussian set $\mathcal{G}^\text{canonical}$ is augmented with a small deformation MLP $\Psi_\phi$ that, at every time $t$, outputs a per-Gaussian displacement of position, scale, and rotation:
 \begin{equation}
     (\Delta \boldsymbol{\mu}_i, \Delta s_i, \Delta q_i) = \Psi_\phi(\boldsymbol{\mu}_i^\text{canonical}, t).
 \end{equation}
 The renderer then evaluates the standard 3DGS rasteriser on the deformed Gaussians. The approach preserves the rendering speed of 3DGS but introduces a dependence on the capacity of the deformation MLP, which must memorise the full motion of every physical feature in the scene. Training dynamics are also sensitive to the deformation MLP's positional encoding.
 
-\paragraph{4D Gaussian Splatting.} Wu et al.~\cite{wu20244dgs} take a different route: they factorise the temporal variation of each Gaussian parameter into a product of spatial and temporal bases stored in a HexPlane-like structure, and decode the per-Gaussian deformation through a compact MLP. This factorisation is storage-efficient but imposes a low-rank assumption on the scene dynamics that is not always satisfied.
+\paragraph{4D Gaussian Splatting.} Wu et al.~\cite{wu20244dgs} take a different route. They factorise the temporal variation of each Gaussian parameter into a product of spatial and temporal bases stored in a HexPlane-like structure, and decode the per-Gaussian deformation through a compact MLP. This factorisation is storage-efficient but imposes a low-rank assumption on the scene dynamics that is not always satisfied.
 
 \paragraph{SpaceTime Gaussians.} Li et al.~\cite{li2024spacetime} replace the MLP-based temporal encoding with an explicit per-Gaussian polynomial. Each Gaussian carries its own low-degree polynomial coefficients for position, rotation, and opacity, which reduces inference cost at the price of an enlarged per-splat parameter set.
 
 \subsection{Positioning of the Proposed Method}
 
-The method developed in Chapter~3 sits in a deliberately minimalistic corner of this design space. Unlike Deformable 3DGS and 4D-GS, it uses \emph{no} auxiliary neural network or temporal basis. Unlike SpaceTime Gaussians, it does \emph{not} store per-Gaussian polynomial coefficients. Like Dynamic 3D Gaussians, it preserves the bijection between frame-0 and frame-$t$ Gaussians, but it does so without any explicit tracking loss, relying instead on a fixed topology, a first-order linear velocity prediction, and a hard freeze of the spherical-harmonic coefficients. The central claim of the thesis is that this ''less-is-more'' configuration is \emph{sufficient} for the characteristic regime of indoor multi-view video with static cameras, and empirically competitive with the more elaborate alternatives in that regime.
+The method developed in Chapter~\ref{ch:research} sits in a deliberately minimalistic corner of this design space. Unlike Deformable 3DGS and 4D-GS, it uses \emph{no} auxiliary neural network or temporal basis. Unlike SpaceTime Gaussians, it does \emph{not} store per-Gaussian polynomial coefficients. Like Dynamic 3D Gaussians, it preserves the bijection between frame-0 and frame-$t$ Gaussians, but it does so without any explicit tracking loss, relying instead on a fixed topology, a first-order linear velocity prediction, and a hard freeze of the spherical-harmonic coefficients. The central claim of the thesis is that this ''less-is-more'' configuration is \emph{sufficient} for the characteristic regime of indoor multi-view video with static cameras, and empirically competitive with the more elaborate alternatives in that regime.
 
 \section{Theoretical Background}
 
 This section states the formal mathematical content of the two algorithms the thesis depends on: 
 \begin{itemize}
-    \item COLMAP's incremental Structure-from-Motion.
+    \item COLMAP's incremental Structure-from-Motion, used for real world applications of the 4DGS.
     
     \item Differentiable rasterisation pipeline of 3D Gaussian Splatting.
 \end{itemize}
-
-Chapter~3 builds on both without re-deriving them.
+Chapter~\ref{ch:research} builds on both without re-deriving them.
 
 \subsection{Sparse Reconstruction via COLMAP}
 
 COLMAP transforms an unordered set of input images $I = \{I_1, \dots, I_N\}$ into a sparse 3D point cloud and the associated camera poses. The pipeline proceeds in two phases.
 
-\subsubsection{Correspondence search}
-
-Feature extraction uses SIFT \cite{lowe1999sift}, which identifies scale- and rotation-invariant keypoints and assigns a $128$-dimensional descriptor to each. Pairwise feature matching produces correspondences. Matches are then geometrically verified through the epipolar constraint. A fundamental matrix $F$ (for uncalibrated cameras) or essential matrix $E$ (for calibrated cameras) is estimated with RANSAC, and matches $(x, x')$ satisfying
+The first stage is a \textbf{correspondence search}. Feature extraction uses SIFT \cite{lowe1999sift}, which identifies scale- and rotation-invariant keypoints and assigns a $128$-dimensional descriptor to each. Pairwise feature matching produces correspondences. Matches are then geometrically verified through the epipolar constraint. A fundamental matrix $F$ (for uncalibrated cameras) or essential matrix $E$ (for calibrated cameras) is estimated with RANSAC, and matches $(x, x')$ satisfying
 \begin{equation}
     x'^T F x = 0
 \end{equation}
-within a pixel tolerance are retained as inliers.
-
-\subsubsection{Incremental reconstruction} 
-
-The system is seeded with a two-view reconstruction obtained from an image pair with high inlier count and wide baseline. New images are registered by the Perspective-n-Point (PnP) algorithm, which solves for the pose $(R, t)$ that projects the already-triangulated 3D points onto the new image's 2D observations. As new images and points are added, mathematical drift accumulates and is periodically corrected by \emph{bundle adjustment}, a non-linear least-squares optimisation that jointly refines all 3D point positions and all camera parameters to minimise the total reprojection error:
+within a pixel tolerance are retained as inliers. The second stage is an \textbf{incremental reconstruction}. The system is seeded with a two-view reconstruction obtained from an image pair with high inlier count and wide baseline. New images are registered by the Perspective-n-Point (PnP) algorithm, which solves for the pose $(R, t)$ that projects the already-triangulated 3D points onto the new image's 2D observations. As new images and points are added, mathematical drift accumulates and is periodically corrected by \emph{bundle adjustment}, a non-linear least-squares optimisation that jointly refines all 3D point positions and all camera parameters to minimise the total reprojection error:
 \begin{equation}
     E = \sum_{i}\sum_{j} \rho\!\left(\left\| u_{ij} - \pi(K_i [R_i | t_i]\,X_j) \right\|_2^2\right),
 \end{equation}
-where $u_{ij}$ is the observed 2D location of 3D point $X_j$ in image $i$, $\pi$ is the pinhole projection function, $K_i$ the intrinsic matrix of camera $i$, and $\rho$ a robust loss (Huber or Cauchy) used to damp the influence of residual outliers. Bundle adjustment is the numerical backbone of modern SfM, without it, any incremental pipeline would accumulate unbounded drift over long trajectories.
+where $u_{ij}$ is the observed 2D location of 3D point $X_j$ in image $i$, $\pi$ is the pinhole projection function, $K_i$ the intrinsic matrix of camera $i$, and $\rho$ a robust loss (Huber or Cauchy) used to damp the influence of residual outliers. Bundle adjustment is the numerical backbone of modern SfM, without it, any incremental pipeline would accumulate unbounded drift over long trajectories. A GUI showing successful 3D point cloud extraction from a set of images of some an object can be seen on Figure \ref{fig:colmap}. 
 
 \begin{figure}[!ht]
     \begin{center}
@@ -186,24 +181,20 @@ where $u_{ij}$ is the observed 2D location of 3D point $X_j$ in image $i$, $\pi$
 \subsection{3D Gaussian Splatting}
 \label{sec:notation}
 
-3DGS represents a scene as a learnable point cloud of 3D Gaussians $\mathcal{G} = \{g_1, \dots, g_N\}$, where each primitive acts as a soft, semi-transparent ellipsoidal particle with learnable geometric and appearance parameters. The framework can be divided into several steps, presented in the following paragraphs. Because the remainder of this thesis --- and in particular the temporal method of Chapter~3 --- is notation-heavy, this section also fixes the parameterisation and symbols once, so that later chapters can build on them without re-deriving them.
-
-\subsubsection{The Gaussian Primitive and its Parameterisation}
-
-Each primitive is the tuple
+3DGS represents a scene as a learnable point cloud of 3D Gaussians $\mathcal{G} = \{g_1, \dots, g_N\}$, where each primitive acts as a soft, semi-transparent ellipsoidal particle with learnable geometric and appearance parameters. The framework can be divided into several steps, presented in the following paragraphs. Because the remainder of this thesis, and in particular the temporal method of Chapter~\ref{ch:research}, is notation-heavy, this section also fixes the parameterisation and symbols once, so that later chapters can build on them without re-deriving them. Each primitive is the tuple
 \begin{equation}
     g_i = \big(\boldsymbol{\mu}_i,\; \mathbf{s}_i,\; \mathbf{q}_i,\; \tilde\sigma_i,\; \mathrm{SH}_i\big),
 \end{equation}
-whose components carry the following meaning and storage convention (Figure~\ref{fig:gaussian}).
+whose components carry the following meaning and storage convention (Figure~\ref{fig:gaussian}):
 
 \begin{itemize}
     \item $\boldsymbol{\mu}_i \in \mathbb{R}^3$ is the \textbf{mean}, the centre of
     the primitive in world coordinates. When time matters it is written
     $\boldsymbol{\mu}_i(t)$ or $\boldsymbol{\mu}^{(i)}_t$, the position of primitive
-    $i$ at frame $t$. This is the parameter that motion acts on in Chapter~3.
+    $i$ at frame $t$. This is the parameter that motion acts on in Chapter~\ref{ch:research}.
 
     \item $\mathbf{s}_i \in \mathbb{R}^3$ is the \textbf{log-scale}. The physical
-    extent along each local axis is its exponential, $\exp(s_{i,k})$; storing the
+    extent along each local axis is its exponential, $\exp(s_{i,k})$. Storing the
     logarithm guarantees a strictly positive scale for any real optimised value, so
     no positivity constraint is needed after a gradient step. The diagonal scale
     matrix is $\mathbf{S}_i = \mathrm{diag}\!\big(\exp(s_{i,1}), \exp(s_{i,2}),
@@ -216,12 +207,12 @@ whose components carry the following meaning and storage convention (Figure~\ref
     formula. Scale and rotation together define the $3\times3$ covariance, which is
     never stored explicitly but recovered as
     \begin{equation}
-        \boldsymbol{\Sigma}_i = \mathbf{R}_i\, \mathbf{S}_i\, \mathbf{S}_i^{\!\top}\, \mathbf{R}_i^{\!\top}
-        = \mathbf{R}_i\, \mathbf{S}_i^2\, \mathbf{R}_i^{\!\top}.
+        \boldsymbol{\Sigma}_i = \mathbf{R}_i\, \mathbf{S}_i\, \mathbf{S}_i^T\, \mathbf{R}_i^T
+        = \mathbf{R}_i\, \mathbf{S}_i^2\, \mathbf{R}_i^T.
         \label{eq:cov}
     \end{equation}
     This factorisation is the reason orientation and scale are stored separately
-    rather than as a raw covariance: it keeps $\boldsymbol{\Sigma}_i$ symmetric
+    rather than as a raw covariance, it keeps $\boldsymbol{\Sigma}_i$ symmetric
     positive semi-definite by construction, which a freely optimised $3\times3$
     matrix would not be.
 
@@ -237,7 +228,7 @@ whose components carry the following meaning and storage convention (Figure~\ref
     $\mathbf{c}_i(\mathbf{d}) = \sum_{\ell=0}^{L}\sum_{m=-\ell}^{\ell}
     \mathbf{k}_{\ell,m}^{(i)} Y_{\ell}^{m}(\mathbf{d})$, with $Y_\ell^m$ the real SH
     basis. The zeroth band is the diffuse (Lambertian) term and higher bands capture
-    view-dependent effects such as specularities; the diffuse RGB colour recovered
+    view-dependent effects such as specularities, the diffuse RGB colour recovered
     from the DC band is
     \begin{equation}
         \mathbf{c}_i = \tfrac{1}{2}\mathbf{1} + C_0\, \mathrm{SH}_i^{(0)},
@@ -257,7 +248,7 @@ whose components carry the following meaning and storage convention (Figure~\ref
     ellipsoid). The mean $\boldsymbol{\mu}_i$ locates it, the rotation
     $\mathbf{R}(\hat{\mathbf{q}}_i)$ orients it, the exponentials of the log-scales
     set its axis lengths, and the opacity $\sigma_i$ controls how much it
-    contributes; together scale and rotation form the covariance
+    contributes, together scale and rotation form the covariance
     $\boldsymbol{\Sigma}_i$ of Eq.~\eqref{eq:cov}.}
     \label{fig:gaussian}
 \end{figure}
@@ -268,17 +259,14 @@ the unnormalised Gaussian
     G_i(\mathbf{x}) = \exp\!\Big(-\tfrac{1}{2}(\mathbf{x}-\boldsymbol{\mu}_i)^{\!\top}
     \boldsymbol{\Sigma}_i^{-1} (\mathbf{x}-\boldsymbol{\mu}_i)\Big).
 \end{equation}
-
-\subsubsection{Projection and Differentiable Rasterisation}
-
 To form an image, each primitive is projected onto the image plane of a camera with
 viewing transformation $\mathbf{W}$ and the Jacobian $\mathbf{J}$ of the local affine
 approximation of the projective transformation, yielding a 2D Gaussian with covariance
 \begin{equation}
-    \boldsymbol{\Sigma}^{\,2\mathrm{D}}_i = \mathbf{J}\,\mathbf{W}\, \boldsymbol{\Sigma}_i\, \mathbf{W}^{\!\top}\mathbf{J}^{\!\top},
+    \boldsymbol{\Sigma}^{\,2\mathrm{D}}_i = \mathbf{J}\,\mathbf{W}\, \boldsymbol{\Sigma}_i\, \mathbf{W}^T\mathbf{J}^T,
 \end{equation}
 the elliptical-weighted-average (EWA) approximation. The screen is divided into pixel
-tiles; primitives are culled against the view frustum and depth-sorted tile-by-tile
+tiles, primitives are culled against the view frustum and depth-sorted tile-by-tile
 with a GPU radix sort. The colour of a pixel $\mathbf{p}$ is then the front-to-back
 alpha composite of the depth-sorted primitives that cover it,
 \begin{equation}
@@ -290,29 +278,25 @@ alpha composite of the depth-sorted primitives that cover it,
 \end{equation}
 where $\mathcal{N}(\mathbf{p})$ is the depth-sorted set of primitives whose footprint
 covers $\mathbf{p}$ and $G^{\,2\mathrm{D}}_i$ is the projected 2D Gaussian evaluated at
-$\mathbf{p}$. This compositing rule is fully differentiable: gradients flow from the
+$\mathbf{p}$. This compositing rule is fully differentiable, gradients flow from the
 pixel colour back through the depth-sort and the 2D covariance to every optimisable
-parameter $(\boldsymbol{\mu}_i, \mathbf{q}_i, \mathbf{s}_i, \tilde\sigma_i, \mathrm{SH}_i)$.
-
-Finally, two indexing conventions are used throughout the thesis: $t \in \{0,\dots,F-1\}$
+parameter $(\boldsymbol{\mu}_i, \mathbf{q}_i, \mathbf{s}_i, \tilde\sigma_i, \mathrm{SH}_i)$. Finally, two indexing conventions are used throughout the thesis: $t \in \{0,\dots,F-1\}$
 indexes the $F$ temporal frames and $c \in \{1,\dots,C\}$ indexes the $C$ cameras of a
 capture, $k$ indexes a global optimiser step, and a hat ($\hat I$) denotes a rendered
 quantity as opposed to an observed one ($I$).
 
-\subsubsection{Adaptive Density Control} 
+\subsubsection{Adaptive Density Control}
 
-A critical feature of 3DGS is that the number of Gaussians is not fixed, it evolves during training through a cyclical process of densification and pruning driven by the accumulated view-space positional gradient $\|\nabla_{\boldsymbol{\mu}} \mathcal{L}\|_2$. The evolution strategy responds to two reconstruction errors, which visualizations can also be seen on Figure \ref{fig:gaussian3}:
-
+A critical feature that distinguishes 3DGS from methods operating on a fixed set of primitives is that the number of Gaussians is not predetermined, instead, it evolves organically during training through a process of densification and pruning. This process is driven by the accumulated view-space positional gradient $\|\nabla_{\boldsymbol{\mu}} \mathcal{L}\|_2$, which serves as a proxy for reconstruction error. Regions of the scene that are poorly explained by the current set of Gaussians tend to accumulate large positional gradients as the optimizer repeatedly tries to shift primitives to reduce the loss. By monitoring this signal, the optimization can identify \emph{where} additional representational capacity is needed and allocate it adaptively, concentrating Gaussians in geometrically complex or high-frequency regions while leaving smooth, well-reconstructed areas sparse. The evolution strategy responds to two distinct and complementary failure modes, visualizations of which can also be seen in Figure \ref{fig:gaussian3}:
 \begin{itemize}
-    \item \textbf{Under-reconstruction:} regions where Gaussians are too sparse. Diagnosed by high positional gradient \emph{combined with} small Gaussian scale, and resolved by \textbf{cloning}, i.e.\ duplicating the offending Gaussian and moving the clone along the gradient direction.
-    \item \textbf{Over-reconstruction:} regions where a single large Gaussian attempts to cover complex geometry. Diagnosed by high positional gradient \emph{combined with} large Gaussian scale, and resolved by \textbf{splitting}, i.e.\ replacing the Gaussian with two children of reduced scale whose positions are sampled from the parent's 3D distribution.
+    \item \textbf{Under-reconstruction.} regions where Gaussians are too sparse to capture the underlying geometry, leaving gaps or missing detail. This case is diagnosed by a high positional gradient \emph{combined with} a small Gaussian scale, indicating that a small primitive is being pulled in multiple directions to cover more area than it can represent. It is resolved by \textbf{cloning}, i.e.\ duplicating the choosen Gaussian and displacing the clone along the direction of the positional gradient, thereby increasing local density and total covered volume in the region that demands it.
+    
+    \item \textbf{Over-reconstruction.} regions where a single large Gaussian attempts to cover complex geometry that varies at a finer scale than the primitive itself. This case is diagnosed by a high positional gradient \emph{combined with} a large Gaussian scale, and is resolved by \textbf{splitting}, i.e.\ replacing the oversized Gaussian with two smaller children whose scale is reduced by a fixed factor and whose positions are sampled from the parent's own 3D distribution. In contrast to cloning, splitting preserves the covered volume while increasing spatial resolution, allowing finer detail to emerge.
 \end{itemize}
-
-In parallel, Gaussians whose opacity has decayed below a threshold are \textbf{pruned}, and every few thousand iterations all opacities are \textbf{reset} to a small ceiling to flush out semi-transparent ''floaters''. This entire machinery is active during the static reconstruction phase of the pipeline described in Chapter~3. Crucially, the dynamic extension proposed by this thesis \emph{disables} densification, pruning, and opacity reset after the first frame, freezing the topology of the Gaussian set so that per-primitive temporal correspondence is preserved across the entire video sequence. This design choice is motivated directly by the positioning discussed at the end of Section~2.4.
-
+In parallel with these growth operations, the representation is continuously kept compact, Gaussians whose opacity has decayed below a threshold are \textbf{pruned}, since near-transparent primitives contribute little to the rendered image while still incurring memory and compute cost. Additionally, every few thousand iterations all opacities are \textbf{reset} to a small ceiling value, which forces the optimization to re-justify the existence of each Gaussian and helps flush out spurious semi-transparent ''floaters'' that would otherwise persist in empty space. Together, densification, pruning, and opacity reset form a self-regulating loop that steers the model toward a small yet expressive set of primitives. This entire machinery is active during the static reconstruction phase of the pipeline described in Chapter~\ref{ch:research}. Crucially, the dynamic extension proposed by this thesis \emph{disables} densification, pruning, and opacity reset after the first frame, freezing the topology of the Gaussian set so that per-primitive temporal correspondence is preserved across the entire video sequence. Because each Gaussian retains a stable identity over time, its trajectory can be tracked and optimized frame-to-frame without the ambiguity that would arise if primitives were repeatedly created and destroyed. This design choice is motivated directly by the positioning discussed at the end of Section~\ref{sec:dynamic}.
 \begin{figure}[!ht]
     \begin{center}
-    \includegraphics[width=0.9\linewidth]{res/02_literature/gaussian-3.png}
+    \includegraphics[width=0.8\linewidth]{res/02_literature/gaussian-3.png}
     \end{center}
     \caption{Visualizations present in the original paper \cite{kerbl2023} of how 3DGS solves the problem of under- and over-reconstruction.}
     \label{fig:gaussian3}
