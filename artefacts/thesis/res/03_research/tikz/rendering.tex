@@ -1,0 +1,36 @@
+\begin{tikzpicture}[
+  font=\small,
+  node/.style={draw, thick, rounded corners=2pt, minimum width=1.55cm, minimum height=0.85cm, align=center},
+  fgnode/.style={node, draw=green!55!black, fill=green!16},
+  fgnodeoff/.style={node, draw=gray!60, fill=gray!12, text=gray!70},
+  bgnode/.style={node, draw=blue!60!black, fill=blue!22},
+  arrow/.style={-{Latex[length=2.0mm]}, thick},
+  toggle/.style={-{Latex[length=2.0mm]}, thick, red!65!black},
+]
+% --- GPU-resident scene nodes ------------------------------------------------
+\node[bgnode, minimum width=12.6cm] (bg) at (5.5,1.6)
+  {static background node \quad \footnotesize (uploaded once, always visible)};
+
+\node[fgnodeoff] (f0) at (0.0,0)  {frame $0$\\ \footnotesize hidden};
+\node[fgnodeoff] (f1) at (1.9,0)  {frame $1$\\ \footnotesize hidden};
+\node[fgnode]    (ft) at (3.8,0)  {frame $t$\\ \footnotesize \textbf{visible}};
+\node[fgnodeoff] (f3) at (5.7,0)  {frame $t{+}1$\\ \footnotesize hidden};
+\node[font=\footnotesize] at (7.2,0) {$\cdots$};
+\node[fgnodeoff] (fF) at (8.7,0)  {frame $F{-}1$\\ \footnotesize hidden};
+
+\draw[decorate, decoration={brace, amplitude=5pt, mirror, raise=4pt}, thick]
+  (-0.85,-0.48) -- (9.55,-0.48)
+  node[midway, below=9pt, font=\footnotesize, align=center]
+  {all $F$ foreground clouds uploaded once at startup, as one scene node each};
+
+% --- playback control --------------------------------------------------------
+\node[node, draw=black!70, fill=white] (ctl) at (12.1,0)
+  {playback\\ \footnotesize play/pause, fps,\\ \footnotesize loop, scrub};
+\draw[toggle] (ctl.west) -- (ft.east)
+  node[midway, above, font=\footnotesize, red!65!black, align=center, yshift=2pt]
+  {flip \texttt{visible}\\ \footnotesize (no re-upload)};
+
+% --- compositing --------------------------------------------------------------
+\draw[arrow, blue!60!black] (bg.south -| ft) -- (ft.north)
+  node[midway, right, font=\footnotesize, align=left] {composited\\ every draw};
+\end{tikzpicture}

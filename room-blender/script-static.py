@@ -3,7 +3,7 @@ import os
 import json
 import math
 
-OUTPUT_DIR = "./output"
+OUTPUT_DIR = "./output2"
 CAMERA_NAMES = ["static1", "static2", "static3", "static4"]
 # ==========================================
 

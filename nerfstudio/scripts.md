@@ -820,3 +820,56 @@ So the default already beats the 5× target by ~2× at ~30 dB; colours and norma
 lossless, position error is ~0.9% of the scene span. Positions are cheap (x/y/z ≈ 15/19/7
 coeffs), while the noisy opacity/rotation channels dominate the budget (hit the 64 cap) — lower
 `--max-coeffs` for a smaller file, raise `--quality` for higher fidelity.
+
+---
+
+# Thesis benchmark suite (added 2026-07-02, rerun same day at 10k/3k)
+
+All experiments for the thesis results chapter live in `experiments/` and write JSONs to
+`experiments/outputs/`; the figure generators write **PNG (300 dpi)** figures straight into
+`../artefacts/thesis/res/03_research/results/`. Trained runs for the chapter live under
+`splats/thesis/<experiment-name>/temporal-splatfacto/thesis2/` (budgets N0=10000, Nt=3000 —
+pass BOTH `--pipeline.model.{initial,tracking}-iterations` and
+`--pipeline.datamanager.{initial,tracking}-iterations`).
+
+**Background subtraction defaults were retuned** by a joint threshold/erosion sweep against
+the GT silhouettes: `bg_subtract_threshold=0.06`, `bg_subtract_erode=2` (a new final-erosion
+stage, N x 3x3 erosions after the dilation; the dilate+erode pair = closing + fringe
+contraction). Cache dir default is now `images_bgsub_t06e2`. IoU 0.863/P 0.936/R 0.918 vs
+0.824/0.933/0.878 for the old tau=0.1/no-erosion setting; pure-IoU optimum is (0.06, e=1)
+at 0.884 — e=2 was chosen for the extra precision. Old-setting comparison run:
+`full150_base` (tau=0.1, e=0, dir images_bgsub).
+
+**Ground truth**: `output/black-bg-frames/static*` (room hidden; never seen by the pipeline).
+The *illumination gap*: hiding the room removes bounce light, subject ~18% brighter in the
+tuned segmented inputs; a pixel-perfect copy of the inputs scores only ~17.1 dB mean object
+PSNR vs GT (15.3-19.8 per frame). Read all object-PSNR numbers against that reference.
+
+| Script | What it does |
+|---|---|
+| `experiments/bgsub_benchmark.py` | Mask IoU/P/R + segmented-image PSNR vs GT; threshold sweep; **erosion sweep** (CPU) |
+| `experiments/hull_init_benchmark.py` | Frame-0 fit from hull seed vs random seed (same budget / `--matched-budget 50000`) |
+| `experiments/eval_temporal.py` | Offline eval of any run's `temporal_frames/`: object PSNR/SSIM, coverage, leak, extent, colour drift -> JSON |
+| `experiments/compression_benchmark.py` | Quality sweep of `temporal_compress.py`: disk ratio + render PSNR, per-attribute K |
+| `experiments/make_figures.py` | All matplotlib result figures as PNG (rerunnable; skips missing JSONs) |
+| `experiments/make_qualitative.py` | PNG image figures: bg-sub montage, GT-vs-render montage, merged composite, trajectories |
+
+Headline numbers (150 frames, 1080p, N0=10k/Nt=3k, tuned segmentation, RTX 6000 Ada):
+71 min end-to-end, 11 561 gaussians (2.9 MB/frame, 430 MB), object PSNR 17.87 dB (above the
+17.1 dB input reference on 149/150 frames), SSIM 0.854 flat over the sequence, leak 1.3e-3.
+Old-segmentation flagship (`full150_base`): 16.13 dB / 0.783 — the retuned masks are worth
++1.7 dB / +0.07 SSIM end-to-end. Ablations (150 frames, half res, ~45 min each):
+no snapping -> runaway extent 33.9; gating -> parked strays, worst SSIM 0.651 + leak 8.7e-3;
+full-image loss -> background floods to opacity 0.99 by the last frame (PSNR decays to 10.5);
+frozen opacity (no snap) -> SSIM 0.606; free colours -> f_dc drift 1.75 for no PSNR gain;
+no velocity at Nt=3000 -> same end quality (velocity = efficiency: 62 vs 224 steps to 20 dB,
+72% fewer; plateau quality 24.6 vs 20.0 dB at a 400-step cap). Hull seed 1643->5900 @38.8 dB;
+equal-budget random collapses to 5.9 dB; 50k random reaches 42.4 dB but needs 69k prims
+(~12x). Compression on this run: 430 MB -> 15.5 MB (27.8x) @ 26.2 dB with q=0.999 (colours
+lossless via constant mode; opacity/scale/rot hit the 64-coeff cap — the 3k-step budget makes
+non-positional channels noisier, hence lower ratio than short-budget runs). Background
+splatfacto (dynamic1, 240 poses): 40.7 dB / 0.989 SSIM held-out (unchanged run `thesis`).
+
+Remaining known limitation: residual camouflage holes vs the rug in early frames (reduced by
+the tuned setting, not eliminated); strict snap test still flags ~half the cloud per frame on
+imperfect masks (a majority test rho_s<1 would be gentler).
