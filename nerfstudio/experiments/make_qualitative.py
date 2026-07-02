@@ -92,13 +92,15 @@ def fig_bgsub_montage(dataset: Path, gt_dir: Path, cam: str, frame: int,
         (seg[y0:y1, x0:x1], "segmented $\\tilde I_{c,t}$", None),
         (gt[y0:y1, x0:x1], "ground truth", None),
     ]
-    fig, axes = plt.subplots(2, 3, figsize=(6.3, 2 * 1.05 * (y1 - y0) / (x1 - x0) * 3.15 / 2 + 0.9))
+    n = len(panels)
+    tile_w = 6.3 / n
+    fig, axes = plt.subplots(1, n, figsize=(6.3, tile_w * (y1 - y0) / (x1 - x0) + 0.42))
     for ax, (im, title, cmap) in zip(axes.ravel(), panels):
         ax.imshow(im, cmap=cmap, vmin=0 if cmap else None, vmax=1 if cmap else None)
-        ax.set_title(title, fontsize=9)
+        ax.set_title(title, fontsize=6.5)
         ax.axis("off")
-    fig.tight_layout(pad=0.4)
-    _save(fig, "bgsub_montage.png")
+    fig.tight_layout(pad=0.25)
+    _save(fig, "bgsub_montage.png", dpi=300)
 
 
 # ------------------------------------------------------------------ 2. GT vs render montage
