@@ -15,10 +15,8 @@
   \foreach \x/\y in {0/0.35,0.5/0.9,1.0/1.25,1.5/1.1,2.0/0.55,2.5/0.7,3.0/1.15}
     \fill[blue!60!black] (\x,\y) circle (1.1pt);
 \end{scope}
-
 % arrow: DCT
 \draw[ar] (3.5,0.7) -- (4.5,0.7) node[midway, above, font=\scriptsize]{DCT};
-
 % ============================ coefficients ==================================
 \begin{scope}[shift={(4.9,0)}]
   \draw[ax] (0,0) -- (3.4,0) node[right, font=\scriptsize]{$k$};
@@ -31,13 +29,11 @@
   \foreach \x/\y in {1.8/0.18,2.2/0.12,2.6/0.08,3.0/0.06}{
     \draw[drop] (\x,0) -- (\x,\y); \fill[gray!55] (\x,\y) circle (1.0pt);}
   \draw[densely dashed, red!65!black] (1.6,-0.1) -- (1.6,1.6);
-  \node[red!65!black, font=\scriptsize, anchor=south] at (0.8,1.55) {keep $K$};
+  \node[red!65!black, font=\scriptsize, anchor=south] at (1.05,1.2) {keep $K$};
   \node[gray!55!black, font=\scriptsize, anchor=south] at (2.5,1.0) {drop};
 \end{scope}
-
 % arrow: inverse DCT
 \draw[ar] (8.7,0.7) -- (9.7,0.7) node[midway, above, font=\scriptsize, align=center]{IDCT};
-
 % ============================ reconstruction ================================
 \begin{scope}[shift={(10.1,0)}]
   \draw[ax] (0,0) -- (3.2,0) node[right, font=\scriptsize]{$t$};
@@ -48,11 +44,11 @@
   \draw[green!50!black, thick] plot[smooth, tension=0.9]
      coordinates {(0,0.45) (0.6,0.95) (1.2,1.1) (1.8,0.85) (2.4,0.65) (3.0,1.0)};
 \end{scope}
-
-% ============================ modes legend ==================================
-\node[anchor=west, font=\footnotesize] at (0,-1.0)
-  {\textbf{per-attribute mode:}\quad
-   \textcolor{gray!55!black}{$\circ$ zero (normals)}\quad
-   \textcolor{orange!75!black}{$\bullet$ const (colour)}\quad
-   \textcolor{blue!60!black}{$\bullet$ DCT-$K$ (motion / shape / opacity)}};
+% ============================ colour key ====================================
+\node[anchor=west, font=\footnotesize] at (-1,-1.05) {%
+  \tikz[baseline=-0.6ex]{\draw[blue!60!black,thick](0,0)--(0.5,0);\fill[blue!60!black](0.25,0)circle(1.1pt);}~signal \& kept coeffs\quad
+  \tikz[baseline=-0.6ex]{\draw[gray!55,thick,densely dotted](0,0)--(0.5,0);}~original / dropped coeffs\quad
+  \tikz[baseline=-0.6ex]{\draw[green!50!black,thick](0,0)--(0.5,0);}~reconstruction\quad
+  \tikz[baseline=-0.6ex]{\draw[red!65!black,thick,densely dashed](0,0)--(0.5,0);}~keep-$K$ cutoff%
+};
 \end{tikzpicture}

@@ -589,22 +589,7 @@ accumulated on one frame is a reasonable prior for the next.
 \subsubsection{Visual-Hull Initialization}
 \label{sec:hull}
 
-3D Gaussian Splatting is notoriously sensitive to
-initialization; a poor seed leads to floaters, a prolonged densification phase, or
-outright divergence. The standard remedy is to seed from a Structure-from-Motion
-point cloud, but that is exactly the dependency this work removed. Two seed-free
-alternatives exist: a random cloud in a bounding box, or a geometry-aware seed derived
-from the images. A random box wastes most of its primitives outside the object, which
-the optimizer must then spend iterations culling, and it provides no colour prior. The
-key observation here is that the subject is rendered against a black background, so the
-object's \emph{silhouette} in each camera is trivially available by thresholding
-brightness. The intersection of the silhouette cones from several cameras, the
-classical \emph{visual hull}, is a tight, bounded volume that already hugs the object
-from every side. Seeding inside this hull places primitives where they are needed from
-the very first iteration, with no stray background primitives to cull later, and is
-the geometry-aware initialization the method uses (Algorithm~\ref{alg:carve}).
-
-\begin{algorithm}[H]
+\begin{algorithm}[t]
 \SetAlgoLined
 \KwIn{frame-$0$ images $\{I_c\}_{c=1}^{C}$, poses $\{\mathbf{M}_c\}$, grid resolution
       $R$, brightness threshold $\tau_b$, view fraction $\rho$}
@@ -624,7 +609,20 @@ subsample $\mathcal{H}$ to the point budget if necessary\;
 \label{alg:carve}
 \end{algorithm}
 
-A voxel grid of resolution $R^3$ (default $R = 192$) is laid over a cube centred on
+3D Gaussian Splatting is notoriously sensitive to
+initialization, a poor seed leads to floaters, a prolonged densification phase, or
+outright divergence. The standard remedy is to seed from a Structure-from-Motion
+point cloud, but that is exactly the dependency this work removed. Two seed-free
+alternatives exist, a random cloud in a bounding box, or a geometry-aware seed derived
+from the images. A random box wastes most of its primitives outside the object, which
+the optimizer must then spend iterations culling, and it provides no colour prior. The
+key observation here is that the subject is rendered against a black background, so the
+object's silhouette in each camera is trivially available by thresholding
+brightness. The intersection of the silhouette cones from several cameras, the
+classical visual hull, is a tight, bounded volume that already hugs the object
+from every side. Seeding inside this hull places primitives where they are needed from
+the very first iteration, with no stray background primitives to cull later, and is
+the geometry-aware initialization the method uses (Algorithm~\ref{alg:carve}). A voxel grid of resolution $R^3$ (default $R = 192$) is laid over a cube centred on
 the cameras. Each frame-$0$ image is converted to a foreground mask by thresholding
 its per-pixel brightness,
 \begin{equation}
@@ -651,14 +649,14 @@ foreground in, say, three of four cameras, which tolerates mask noise and partia
 self-occlusion at the cost of a slightly looser hull. The surviving voxels seed the
 Gaussians through nerfstudio's standard seed-point interface, each coloured by the
 mean of its projected image samples via Eq.~\eqref{eq:sh2rgb} and subsampled to a
-budget if there are too many. Because $\mathcal{H}$ is an \emph{intersection} of exact
+budget if there are too many. Because $\mathcal{H}$ is an intersection of exact
 silhouette cones rather than a loose bounding box, it bounds the object volume
 directly. This is precisely the property that makes it a far better seed than a random
-cube, and the reason the hull is preferred over a ``large box, then prune'' strategy
+cube, and the reason the hull is preferred over a ''large box, then prune'' strategy
 that would spend many early iterations discarding primitives that the hull never
 creates.
 
-\begin{figure}[!ht]
+\begin{figure}[t]
     \centering
     \input{res/03_research/tikz/visual_hull}
     \caption{Visual-hull carving (shown in 2D for three cameras). Each camera
@@ -675,8 +673,8 @@ The first frame is reconstructed by the full Gaussian-Splatting optimizer, with
 adaptive density control active, for $N_0$ iterations starting from the hull seed.
 This stage plays two roles. The obvious one is to produce a high-quality
 reconstruction of the subject in its frame-$0$ pose. The less obvious but more
-important one is that it \emph{fixes the primitive count for the rest of the video}:
-densification and pruning are hard-stopped at step $N_0$, after which $|\mathcal{G}_t|
+important one is that it fixes the primitive count for the rest of the video.
+Densification and pruning are hard-stopped at step $N_0$, after which $|\mathcal{G}_t|
 = |\mathcal{G}_0|$ for all $t \ge 0$. Densification must be allowed here, because the
 hull seed is only a coarse volumetric occupancy and the optimizer needs the freedom
 to add primitives where fine detail demands them and to remove primitives the hull
@@ -696,7 +694,7 @@ local means, variances, and covariance of the two images through a small Gaussia
 window, and $\lambda = 0.2$ balances the two. The $L_1$ term drives pixel-accurate
 colour, while the SSIM term enforces local structural agreement and prevents the
 optimizer from smearing a few oversized primitives across the image. As detailed in
-Section~\ref{sec:masking}, this loss is in fact restricted to the object region; the
+Section~\ref{sec:masking}, this loss is in fact restricted to the object region, the
 training background is black so that empty image regions cost nothing. At the end of
 this stage the cloud is a dense, well-localized reconstruction of the subject with a
 primitive count that will never change again.
@@ -705,25 +703,27 @@ primitive count that will never change again.
 \label{sec:tracking}
 
 Each subsequent frame is reconstructed by re-running the optimizer against the
-\emph{same} primitives for $N_t$ steps, under three constraints that together turn the
+same primitives for $N_t$ steps, under three constraints that together turn the
 problem from reconstruction into tracking. The constraints are not independent
-conveniences; each addresses a specific failure mode of unconstrained per-frame
+mechanics, each addresses a specific failure mode of unconstrained per-frame
 fitting.
 
-\textbf{Constant count (motivation: correspondence).} Densification and pruning are
+\begin{itemize}
+
+    \item \textbf{Constant count (motivation: correspondence).} Densification and pruning are
 disabled and the periodic opacity reset is skipped, so the primitive set is conserved
-exactly across the frame. The motivation is correspondence: only if the count is fixed
+exactly across the frame. The motivation is correspondence, only if the count is fixed
 and no primitive is created or destroyed does the index $i$ refer to the same physical
 feature in frame $t$ as in frame $t-1$. That one-to-one correspondence is what makes
 velocity estimation (Section~\ref{sec:velocity}), trajectory analysis, and the
 per-attribute temporal compression (Section~\ref{sec:compression}) well-defined. A
 varying count would break all three. Skipping opacity reset matters for the same
-reason: the primitives are already well placed, and resetting their opacity would
-discard hard-won information and inject a transient artifact at every frame boundary.
+reason, the primitives are already well placed, and resetting their opacity would
+discard information and inject a transient artifact at every frame boundary.
 
-\textbf{Frozen colour (motivation: motion, not repainting).} The
+\item \textbf{Frozen colour (motivation: motion, not repainting).} The
 spherical-harmonic coefficients, both the diffuse term $\mathrm{SH}^{(0)}$ and all
-higher bands $\mathrm{SH}^{(1..L)}$, are frozen after frame~$0$: their learning
+higher bands $\mathrm{SH}^{(1..L)}$, are frozen after frame~$0$, their learning
 rates are set to zero and their gradient tracking is disabled. The trainable parameter
 set during tracking is therefore restricted to geometry and opacity,
 \begin{equation}
@@ -736,21 +736,21 @@ so that for every tracking step the frozen parameters satisfy
 $\boldsymbol{\theta}_t = \boldsymbol{\theta}_0$ while the trainable ones follow the
 usual gradient update. The motivation is the appearance-motion entanglement of
 problem~2. If the optimizer were free to edit colour during tracking, the cheapest way
-to lower the loss when the subject moves would often be to \emph{repaint} a stationary
+to lower the loss when the subject moves would often be to repaint a stationary
 primitive in the new colour, leaving it geometrically wrong but photometrically
 correct for that frame. Freezing colour removes that option entirely. With appearance
 and population both fixed, the only remaining way to reduce the loss is to \emph{move
 and reshape} the primitives, so tracking is forced to align them to the subject's
-actual motion. This was verified empirically: across frames the colour tensors are
+actual motion. This was verified empirically, across frames the colour tensors are
 bit-identical while the means continue to move, confirming that no appearance editing
 is occurring. Opacity is deliberately left trainable, for reasons taken up in
 Section~\ref{sec:masking}.
 
-\textbf{Per-phase learning rate (motivation: sustained mobility).} The positional
+\item \textbf{Per-phase learning rate (motivation: sustained mobility).} The positional
 learning rate is scheduled differently in the two phases. During frame~$0$ it follows
 the usual exponential decay from $\eta_{\text{init}}$ to $\eta_{\text{final}}$, which
 is appropriate for converging a single static reconstruction. During tracking it is
-held \emph{constant} at $\eta_{\text{track}}$. The motivation is that a single global
+held constant at $\eta_{\text{track}}$. The motivation is that a single global
 decay schedule, of the kind a static run uses, would shrink the learning rate toward
 zero by the late frames and effectively freeze the motion just when the subject is
 still moving. The reconstruction would lock up partway through the sequence. A
@@ -758,6 +758,8 @@ constant tracking rate keeps every frame, early or late, equally able to follow 
 motion. The scale, rotation, and opacity learning rates are likewise kept at their
 tracking values, and the image resolution is held at full scale for every frame so
 that all frames are fit under identical conditions.
+
+\end{itemize}
 
 The tracking budget $N_t$ is set to a small fraction of $N_0$. This is only
 affordable because of the velocity prediction of the next section, which ensures that
@@ -767,24 +769,22 @@ cover only the small residual rather than the full motion arc.
 \subsubsection{Foreground Masking and Silhouette Supervision}
 \label{sec:masking}
 
-\textbf{The failure mode.} A subtle but destructive problem appears if the loss is
+A subtle but destructive problem appears if the loss is
 computed naively over the entire image. With a black background, a stationary black
 region is matched at essentially zero cost regardless of what the primitives do
-nearby, so there is \emph{no force pinning primitives to the silhouette}. Worse, a
+nearby, so there is no force pinning primitives to the silhouette. Worse, a
 bright primitive that drifts a little into the background renders brightly on black
 and incurs a large error there. The cheapest way for the optimizer to reduce that
 error is not to move it back but to drive its opacity to near zero. It then becomes an
-invisible ``dead'' primitive that no longer contributes to any image. Yet the
+invisible ''dead'' primitive that no longer contributes to any image. Yet the
 per-frame velocity prediction (Section~\ref{sec:velocity}) keeps pushing it, so it
 accumulates in empty space. Over a sequence the foreground slowly erodes as primitives
 leak away, while faint background splats proliferate. The naive full-image loss thus
-not only fails to prevent drift, it actively rewards it.
-
-\textbf{The fix: mask the loss and supervise the silhouette.} The remedy is to
+not only fails to prevent drift, it actively rewards it. This problem can be fixed by \textbf{masking the loss and supervising the silhouette}. The remedy is to
 restrict the photometric loss to the object and to add an explicit constraint on the
 rendered silhouette. Let $\mathcal{M}$ be the brightness mask of the ground-truth
 frame (the same construction as in the hull carving) and let $\hat A$ be the rendered
-\emph{accumulation} image, the per-pixel sum of alpha contributions, which is the
+accumulation image, the per-pixel sum of alpha contributions, which is the
 rendered opacity or coverage at that pixel. The photometric loss of
 Eq.~\eqref{eq:photo} is masked to the object,
 \begin{equation}
@@ -806,17 +806,15 @@ first term penalizes any rendered opacity in the region clearly outside the obje
 $1 - \mathcal{M}^{+}$, directly punishing a primitive that strays into the background.
 The second gently encourages full opacity in the eroded object core,
 $\mathcal{M}^{-}$, keeping the subject solid. The band between the erosion and the
-dilation, $\mathcal{M}^{+}\setminus\mathcal{M}^{-}$, is a deliberate ``don't-care''
+dilation, $\mathcal{M}^{+}\setminus\mathcal{M}^{-}$, is a deliberate ''neglected''
 zone around the true boundary in which opacity is neither pushed to zero nor to one,
 so that the soft tails of primitives at the genuine silhouette edge are not fought.
 The total objective is $\mathcal{L} = \mathcal{L}_{\text{photo}} +
 \mathcal{L}_{\text{sil}}$, with default weights $\lambda_{\text{out}} = 1.0$ and
 $\lambda_{\text{in}} = 0.1$. The outside term is weighted an order of magnitude more
 strongly than the inside term because preventing background drift is the primary
-objective, while keeping the core solid is a mild regularizer.
-
-\textbf{Why opacity must stay trainable.} This silhouette mechanism is also the
-reason opacity is \emph{not} frozen during tracking, despite the count- and
+objective, while keeping the core solid is a mild regularizer. \textbf{The opacity must stay trainable.} This silhouette mechanism is also the
+reason opacity is not frozen during tracking, despite the count- and
 colour-freezing philosophy. The masked photometric loss, by construction, gives no
 pull-back signal to a primitive that has strayed into the background. Its only
 remaining way to stop hurting the image is to fade out, and the outside term of
@@ -824,24 +822,20 @@ Eq.~\eqref{eq:sil} is precisely what drives that fade. If opacity were frozen, a
 primitive pushed into the background would have neither a photometric pull-back nor
 the ability to fade, and would simply remain bright and opaque off-object, the
 worst of both worlds. The measurements in Section~\ref{sec:results-masking} confirm
-this: additionally freezing opacity makes background leakage markedly worse, so colour
+this. Additionally freezing opacity makes background leakage markedly worse, so colour
 and count are held constant while opacity is left free.
 
 \subsection{Point-Cloud Velocity and Frustum Clamping}
 \label{sec:velocity}
 
-\subsubsection{Linear Velocity Prediction}
-
 Consecutive frames of a smoothly moving scene are nearly
 identical, so initializing each tracking frame from scratch, or even from the
 frame-$0$ solution, wastes the budget re-traversing motion the optimizer has already
 solved on previous frames. A scene that moves smoothly is, however, also
-\emph{predictable} to first order: the displacement between the two previous frames is
+predictable to first order, the displacement between the two previous frames is
 a good estimate of the displacement to the next. Exploiting this turns each frame's
-starting point from ``the previous frame'' into ``a forward extrapolation of the
-previous motion'', which is much closer to the answer.
-
-Let $\boldsymbol{\mu}^{(i)}_t$ denote the converged position of primitive $i$ at frame
+starting point from ''the previous frame'' into ''a forward extrapolation of the
+previous motion'', which is much closer to the answer. Let $\boldsymbol{\mu}^{(i)}_t$ denote the converged position of primitive $i$ at frame
 $t$. Assuming a constant inter-frame time step (taken as unity), the backward
 finite-difference estimate of the velocity at frame $t-1$ is
 \begin{equation}
@@ -858,7 +852,7 @@ before tracking frame $t$ begins (Figure~\ref{fig:velocity-snap}a),
 \end{equation}
 a single tensor addition costing essentially nothing. The prediction is exact for
 constant-velocity motion. For general motion, the remaining error after the warm start
-is governed by the \emph{acceleration} rather than the velocity. A second-order
+is governed by the acceleration rather than the velocity. A second-order
 expansion gives
 \begin{equation}
     \big\| \boldsymbol{\mu}^{(i),\star}_{t} - \boldsymbol{\mu}^{(i)}_{t} \big\|_2
@@ -867,7 +861,7 @@ expansion gives
     \label{eq:accel}
 \end{equation}
 where $\boldsymbol{\mu}^{(i),\star}_{t}$ is the true optimal position and
-$\mathbf{a}^{(i)}_{t-1}$ the local acceleration. In words: without the prediction the
+$\mathbf{a}^{(i)}_{t-1}$ the local acceleration. Without the prediction the
 optimizer must close the full inter-frame displacement (of order $\|\mathbf{v}\|$),
 whereas with it the optimizer must close only the much smaller acceleration residual
 (of order $\|\mathbf{a}\|$). For human-scale motion at video frame rates the residual
@@ -886,20 +880,16 @@ exist. On frames $0$ and $1$ it is inactive.
     \label{fig:velocity-snap}
 \end{figure}
 
-\subsubsection{Runaway and Left-Behind Gaussians}
-
 The velocity prediction is self-correcting only while a primitive still receives a
 gradient. This caveat interacts dangerously with the masked loss of
 Section~\ref{sec:masking}, and the interaction produces two symmetric failure modes
-that, left unchecked, slowly destroy the reconstruction over a long sequence.
-
-The first is the \emph{runaway}. Suppose a primitive drifts off the subject. Because
+that, left unchecked, slowly destroy the reconstruction over a long sequence. The first is the \emph{runaway}. Suppose a primitive drifts off the subject. Because
 the photometric loss is masked to the object, off-object pixels produce no gradient,
 so the primitive fades and its position stops being corrected. Its frame-to-frame
 displacement then freezes at whatever value it last had, and since the velocity
 prediction of Eq.~\eqref{eq:velocity} simply repeats that displacement, the primitive
-coasts away in a straight line, frame after frame, never to return: a constant
-velocity with no restoring force. The second is the \emph{left-behind} primitive: one
+coasts away in a straight line, frame after frame, never to return. It moves with a constant
+velocity with no restoring force. The second is the \emph{left-behind} primitive. One
 that lags the moving subject, loses its gradient for the same reason, and is simply
 abandoned where it stalled. Both modes remove primitives from the subject. Because the
 count is fixed, lost primitives are not replaced, and the subject degrades and thins
@@ -907,7 +897,7 @@ out as the sequence progresses.
 
 \subsubsection{Per-Frame Hull Snapping}
 
-Both failure modes share a root cause: a
+Both failure modes share a root cause, a
 primitive that leaves the object is never brought back. The fix is therefore to
 re-anchor strays to the geometry at the start of every frame, before they can
 accumulate error. After the velocity warm start, the subject's visual hull is carved
@@ -925,14 +915,14 @@ Algorithm~\ref{alg:snap}):
 \end{equation}
 where $\partial\mathcal{H}_t$ denotes the surface voxels of the frame-$t$ hull, the
 $\arg\min$ selects the nearest of them, and the condition on the right is the stray
-test: a primitive is a stray when it projects into fewer than a fraction $\rho_s$ of
-the camera masks. With $\rho_s = 1$ this is the natural ``not inside all camera
+test. A primitive is a stray when it projects into fewer than a fraction $\rho_s$ of
+the camera masks. With $\rho_s = 1$ this is the natural ''not inside all camera
 silhouettes'' criterion, the strict reading of being outside the volume the cameras
 agree on. After a primitive is snapped, its velocity history $(\boldsymbol{\mu}_{-1},
 \boldsymbol{\mu}_{-2})$ for that primitive is reset, so that the teleport is not
 mistaken for a genuine inter-frame motion and re-extrapolated on the following frame.
 
-\begin{algorithm}[H]
+\begin{algorithm}[t]
 \SetAlgoLined
 \KwIn{cloud $\mathcal{G}$, frame-$t$ images $\{I_{c,t}\}$, poses $\{\mathbf{M}_c\}$,
       stray fraction $\rho_s$}
@@ -949,101 +939,19 @@ $\mathcal{H}_t \gets \textsc{CarveVisualHull}(\{I_{c,t}\}, \{\mathbf{M}_c\})$ at
 \label{alg:snap}
 \end{algorithm}
 
-The effect is twofold. It \emph{reclaims} runaways and left-behind primitives by
+The effect is twofold. It reclaims runaways and left-behind primitives by
 pulling them back onto the object instead of abandoning them, and it
-\emph{re-registers} the whole cloud onto the moving subject each frame, so that a
+re-registers the whole cloud onto the moving subject each frame, so that a
 cloud which lagged or overshot is snapped forward onto the current silhouette. Every
 frame therefore begins with all primitives inside the object as seen from every camera.
 This is a configuration from which the subsequent tracking steps can only improve, since
 they start already consistent with all four silhouettes. This is the sense in which
-the method ``clamps the point cloud to the camera frustums'': the silhouette
+the method ''clamps the point cloud to the camera frustums'': the silhouette
 intersection is the set of points consistent with every camera's frustum-bounded view
 of the object, and snapping enforces membership in it. A milder alternative, used only
 when snapping is disabled, simply zeroes a stray's velocity so it stops coasting. This
 prevents runaways but does not reclaim left-behind primitives, and is measurably
 inferior (Section~\ref{sec:results-snap}).
-
-\subsection{The Merge Rendering Pipeline}
-\label{sec:merge}
-
-The static background and the dynamic foreground are reconstructed separately, so a
-final component is needed to recombine them into a single interactive scene. This is
-the \emph{merge renderer}, built on \emph{viser}, a web-based 3D viewer with
-hardware-accelerated Gaussian rendering. It takes the per-frame foreground clouds and,
-optionally, a static background cloud exported from the baseline reconstruction, and
-composites them with full playback control. Building on viser provides the
-GPU-accelerated rendering and the browser interface without any bespoke graphics code,
-so the renderer is concerned only with marshalling the trained primitives and
-orchestrating playback.
-
-\textbf{From stored parameters to renderable primitives.} Each cloud is stored on
-disk with the optimizer's \emph{raw, pre-activation} parameters, the same values
-the trainer holds, so the renderer must apply the activation functions of
-Section~\ref{sec:notation} to recover the quantities the rasterizer expects. The
-reasoning behind storing pre-activation values is that they are the unconstrained
-quantities gradient descent operates on; the activations are deferred to render time.
-The renderer therefore recovers opacity through the sigmoid and scale through the
-exponential, $\sigma_i = \mathrm{sig}(\tilde\sigma_i)$ and $\mathbf{S}_i =
-\mathrm{diag}(\exp(\mathbf{s}_i))$; normalizes the quaternion and forms the rotation,
-$\hat{\mathbf{q}}_i = \mathbf{q}_i / \|\mathbf{q}_i\|_2 \mapsto \mathbf{R}_i$; reads the
-diffuse colour from the zeroth SH band through Eq.~\eqref{eq:sh2rgb}; and assembles the
-world-space covariance through Eq.~\eqref{eq:cov}. Because the viewer represents a
-Gaussian by its centre, covariance, colour, and opacity, only the upper triangle of
-the symmetric $\boldsymbol{\Sigma}_i$ need be uploaded, packed alongside the colour and
-opacity into the per-primitive buffer the GPU consumes.
-
-\textbf{Compositing and playback (motivation: zero-cost frame switching).} The
-central design decision concerns how frames are switched during playback. The naive
-approach uploads the current frame's cloud, then on each step deletes it and uploads
-the next. This would re-transfer an entire cloud to the GPU every frame, which causes
-visible hitching and bounds the achievable frame rate. Instead, \emph{every} frame is
-uploaded to the renderer exactly once, at startup, as its own scene node, with all
-nodes hidden except frame~$0$. The static background, if present, is uploaded once and
-left permanently visible. Advancing the animation then merely toggles a node's
-visibility flag, with no per-frame disk read, decode, or re-upload, so
-playback is smooth even at high frame rates and scrubbing to an arbitrary frame is
-instantaneous (Figure~\ref{fig:merge-timeline}). This strategy is affordable precisely
-because of the constant-topology principle: the per-frame payload is a small,
-fixed-size cloud, so holding all $F$ frames resident on the GPU at once costs $F$ times
-a modest constant rather than something that grows with motion. For the sequence lengths
-in this work the entire animation fits comfortably in GPU memory. Were a capture long
-enough to exhaust it, the same node mechanism would extend naturally to a sliding
-window of resident frames streamed from disk, at the cost of reintroducing some
-per-frame transfer.
-
-\begin{figure}[!ht]
-    \centering
-    \resizebox{0.92\textwidth}{!}{
-    \begin{tikzpicture}[font=\small,
-        node/.style={draw, rounded corners=2pt, minimum width=1.15cm, minimum height=0.7cm, thick},
-        on/.style ={node, fill=green!22, draw=green!55!black},
-        off/.style={node, fill=gray!12, draw=gray!50},
-        bg/.style ={node, fill=orange!20, draw=orange!75!black, minimum width=8.2cm},
-        ar/.style ={-{Latex[length=2mm]}, thick},
-      ]
-      \node[bg] (bg) at (3.55,1.5) {static background node \;(always visible)};
-      \foreach \i/\x/\st in {0/0/on, 1/1.25/off, 2/2.5/off, 3/3.75/off, 4/5.0/off, 5/6.25/off}{
-        \node[\st] (f\i) at (\x,0) {frame \i};
-      }
-      \node at (7.4,0) {$\cdots$};
-      \draw[ar] (-0.7,-1.0) -- (7.7,-1.0) node[right]{frame index $t$ (visibility toggled)};
-      \draw[->, thick, green!50!black] (f0.south) to[out=-90,in=90] (0,-0.95);
-      \node[green!45!black, font=\footnotesize, anchor=west] at (0.2,-0.6){currently visible};
-    \end{tikzpicture}}
-    \caption{The merge renderer pre-loads all frames as Gaussian nodes (only the
-    current one visible) plus a permanently visible background node. Stepping or
-    playing toggles visibility, avoiding any per-frame re-upload.}
-    \label{fig:merge-timeline}
-\end{figure}
-
-\textbf{Transport controls.} On top of this mechanism the renderer exposes the
-controls needed to inspect a dynamic reconstruction: a play/pause toggle, a loop
-switch that determines whether playback wraps from the last frame back to the first or
-halts, an adjustable playback rate in frames per second, and a frame slider with
-single-step buttons for advancing one frame at a time. Because the underlying frame
-switch is a visibility toggle, all of these operate at no rendering cost beyond drawing
-the single visible frame, whether continuous playback at a chosen rate, looping, or
-manual frame-by-frame scrubbing while paused.
 
 \subsection{Temporal Compression}
 \label{sec:compression}
@@ -1053,20 +961,16 @@ constant-topology principle is what makes the redundancy exploitable. Every fram
 contains the \emph{same} primitives in the \emph{same} order, with count and colour
 held constant and only geometry and opacity evolving, so the value of any single
 attribute of any single primitive, read across all frames, is a \emph{time series} of
-length $F$. Most of these series are either constant (the frozen colours), identically
-zero (the unused surface normals), or smooth (a position that traces a continuous
+length $F$. Most of these series are either constant (the frozen colours) or smooth (a position that traces a continuous
 trajectory). Storing each frame as an independent file ignores all of this structure
 and pays full price for every frame. Treating each attribute as a time series and
 compressing it in a frequency basis pays instead only for the few coefficients needed
-to describe its smooth evolution.
-
-The compressor stacks each attribute into an $F \times N$ matrix (frames by
+to describe its smooth evolution. The compressor stacks each attribute into an $F \times N$ matrix (frames by
 primitives) and classifies it into one of three modes
 (Figure~\ref{fig:compression}):
 \begin{itemize}
     \item \textbf{Zero.} Attributes that are identically zero across all frames and
-    primitives (the surface normals $n_x, n_y, n_z$, which 3DGS does not use) are not
-    stored at all, only flagged.
+    primitives (the surface normals $n_x, n_y, n_z$ from the ply format, which 3DGS does not use) are not stored at all, only flagged.
     \item \textbf{Constant.} Attributes whose temporal standard deviation is below a
     small threshold for every primitive (the frozen colours $f_{\mathrm{dc}}$, which are
     constant by construction) are stored once per primitive rather than once per frame.
@@ -1074,11 +978,11 @@ primitives) and classifies it into one of three modes
     quaternion) is transformed along the time axis and truncated.
 \end{itemize}
 
-\begin{figure}[!ht]
+\begin{figure}[t]
     \centering
     \resizebox{\textwidth}{!}{\input{res/03_research/tikz/compression}}
     \caption{Temporal compression of one attribute. The per-primitive time series is
-    transformed by the DCT; only the lowest $K$ coefficients are retained (chosen
+    transformed by the DCT, only the lowest $K$ coefficients are retained (chosen
     adaptively per attribute), and the inverse transform reconstructs a smooth
     low-pass fit. Identically-zero and constant-in-time attributes are detected and
     stored trivially.}
@@ -1096,7 +1000,7 @@ the compressor takes the type-II Discrete Cosine Transform (DCT) along time,
 where $\hat a[k]$ is the $k$-th frequency coefficient, the cosine basis runs from the
 slowest ($k=0$, the temporal mean) to the fastest ($k = F-1$) variation, and
 $\beta_0 = 1/\sqrt 2$, $\beta_{k>0} = 1$ are the orthonormalization weights. Only the
-lowest $K$ coefficients are kept and the rest are set to zero; the inverse transform
+lowest $K$ coefficients are kept and the rest are set to zero. The inverse transform
 then reconstructs a smooth, low-pass fit to the attribute's evolution. The cut-off $K$
 is chosen \emph{adaptively per attribute} as the smallest number of coefficients that
 retains a target fraction $q$ of the signal energy, averaged over primitives,
@@ -1112,11 +1016,9 @@ $\kappa$ for which it reaches the quality target $q$. A single hard cap bounds $
 the noisiest attributes, and the retained coefficients are stored in half precision.
 This was found to be effectively lossless here because the truncation error of
 Eq.~\eqref{eq:choosek} dominates the quantization error. The single knob $q$ thus
-trades file size against fidelity across all attributes at once.
-
-\textbf{Why the DCT and not the Fourier transform.} The natural alternative, the
+trades file size against fidelity across all attributes at once. \textbf{Why the DCT and not the Fourier transform.} The natural alternative, the
 Discrete Fourier Transform (DFT), performs markedly worse here, and the reason is
-instructive. The motion is \emph{non-periodic}: the subject does not return to its
+instructive. The motion is \emph{non-periodic}, the subject does not return to its
 starting pose at the end of the capture, so the value of an attribute at the last
 frame generally differs from its value at the first. The DFT implicitly treats the
 signal as periodic, so it sees a discontinuity at the wrap from the last frame back to
@@ -1127,10 +1029,75 @@ no such discontinuity, so a smooth but non-periodic trajectory is captured by a 
 low-frequency coefficients. This is the same property that makes the DCT, rather than
 the DFT, the basis of image codecs such as JPEG. The on-disk artifact is the set of
 retained coefficients per time-varying attribute, the single stored value per constant
-attribute, and a small manifest recording each attribute's mode and its $K$;
+attribute, and a small manifest recording each attribute's mode and its $K$,
 decompression applies the inverse of Eq.~\eqref{eq:dct} and reproduces standard
 per-frame files that load unchanged in any Gaussian-Splatting viewer, including the
 merge renderer of Section~\ref{sec:merge}.
+
+\subsection{The Merge Rendering Pipeline}
+\label{sec:merge}
+
+The static background and the dynamic foreground are reconstructed separately, so a
+final component is needed to recombine them into a single interactive scene. This is
+the \emph{merge renderer}, built on viser, a web-based 3D viewer with
+hardware-accelerated Gaussian rendering. It takes the per-frame foreground clouds and,
+optionally, a static background cloud exported from the baseline reconstruction, and
+composites them with full playback control. Building on viser provides the
+GPU-accelerated rendering and the browser interface without any bespoke graphics code,
+so the renderer is concerned only with marshalling the trained primitives and
+orchestrating playback.
+
+Each cloud is stored on
+disk with the optimizer's raw, pre-activation parameters, the same values
+the trainer holds, so the renderer must apply the activation functions of
+Section~\ref{sec:notation} to recover the quantities the rasterizer expects. The
+reasoning behind storing pre-activation values is that they are the unconstrained
+quantities gradient descent operates on, the activations are deferred to render time.
+The renderer therefore recovers opacity through the sigmoid and scale through the
+exponential, $\sigma_i = \mathrm{sig}(\tilde\sigma_i)$ and $\mathbf{S}_i =
+\mathrm{diag}(\exp(\mathbf{s}_i))$, normalizes the quaternion and forms the rotation,
+$\hat{\mathbf{q}}_i = \mathbf{q}_i / \|\mathbf{q}_i\|_2 \mapsto \mathbf{R}_i$, reads the
+diffuse colour from the zeroth SH band through Eq.~\eqref{eq:sh2rgb} and assembles the
+world-space covariance through Eq.~\eqref{eq:cov}. Because the viewer represents a
+Gaussian by its centre, covariance, colour, and opacity, only the upper triangle of
+the symmetric $\boldsymbol{\Sigma}_i$ need be uploaded, packed alongside the colour and
+opacity into the per-primitive buffer the GPU consumes.
+
+The central design decision describes how frames are switched during playback. The naive
+approach uploads the current frame's cloud, then on each step deletes it and uploads
+the next. This would re-transfer an entire cloud to the GPU every frame, which causes
+visible hitching and bounds the achievable frame rate. Instead, every frame is
+uploaded to the renderer exactly once, at startup, as its own scene node, with all
+nodes hidden except frame~$0$. The static background, if present, is uploaded once and
+left permanently visible. Advancing the animation then merely toggles a node's
+visibility flag, with no per-frame disk read, decode, or re-upload, so
+playback is smooth even at high frame rates and scrubbing to an arbitrary frame is
+instantaneous (Figure~\ref{fig:merge-timeline}). This strategy is affordable precisely
+because of the constant-topology principle, the per-frame payload is a small,
+fixed-size cloud, so holding all $F$ frames resident on the GPU at once costs $F$ times
+a modest constant rather than something that grows with motion. For the sequence lengths
+in this work the entire animation fits comfortably in GPU memory. Were a capture long
+enough to exhaust it, the same node mechanism would extend naturally to a sliding
+window of resident frames streamed from disk, at the cost of reintroducing some
+per-frame transfer.
+
+\begin{figure}[!ht]
+    \centering
+    \resizebox{\textwidth}{!}{\input{res/03_research/tikz/rendering}}
+    \caption{The merge renderer pre-loads all frames as Gaussian nodes (only the
+    current one visible) plus a permanently visible background node. Stepping or
+    playing toggles visibility, avoiding any per-frame re-upload.}
+    \label{fig:merge-timeline}
+\end{figure}
+
+On top of this mechanism the renderer exposes the
+controls needed to inspect a dynamic reconstruction, a play/pause toggle, a loop
+switch that determines whether playback wraps from the last frame back to the first or
+halts, an adjustable playback rate in frames per second, and a frame slider with
+single-step buttons for advancing one frame at a time. Because the underlying frame
+switch is a visibility toggle, all of these operate at no rendering cost beyond drawing
+the single visible frame, whether continuous playback at a chosen rate, looping, or
+manual frame-by-frame scrubbing while paused.
 
 \section{Results and Discussion}
 \label{sec:results}

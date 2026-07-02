@@ -22,14 +22,14 @@
   \draw (\x,-0.27) -- (\x,-0.43);
 }
 \node[font=\scriptsize, anchor=north] at (0,-0.5)   {$0$};
-\node[font=\scriptsize, anchor=north] at (5,-0.5)   {$N_0$};
-\node[font=\scriptsize, anchor=north] at (6.3,-0.62){$N_0{+}N_t$};
+\node[font=\scriptsize, anchor=north east] at (5,-0.5)   {$N_0$};
+\node[font=\scriptsize, anchor=north east] at (6.3,-0.5){$N_0{+}N_t$};
 
 % --- braces -----------------------------------------------------------------
 \draw[brace] (0,0.9) -- (5,0.9) node[midway, above=7pt, align=center, font=\footnotesize]
-  {densification \emph{on}; count fixed at step $N_0$};
+  {densification on\\ count fixed at step $N_0$};
 \draw[brace] (5,0.9) -- (13.7,0.9) node[midway, above=7pt, align=center, font=\footnotesize]
-  {tracking: count \& colour frozen, $N_t$ steps each};
+  {tracking: count \& colour frozen\\ $N_t$ steps each};
 
 % --- frame transitions: velocity + snap -------------------------------------
 \foreach \x in {5,6.3,7.6,8.9,10.2,12.4}{

@@ -14,7 +14,7 @@
 
 % --- moving subject (dynamic) region ----------------------------------------
 \begin{scope}[shift={(6.4,0)}]
-  \draw[fill=red!8, draw=red!55!black, thick] (-1.0,-1.6) rectangle (1.4,1.8);
+  \draw[fill=red!8, draw=red!55!black, thick] (-1.0,-1.6) rectangle (2,1.8);
   \node[red!55!black, anchor=north west, font=\footnotesize] at (-0.95,1.7) {moving subject};
   % a few primitives with motion arrows
   \foreach \x/\y in {-0.4/0.9, 0.2/0.2, 0.6/1.0, -0.2/-0.6, 0.4/-1.0}{
@@ -27,5 +27,4 @@
 
 % --- shared label -----------------------------------------------------------
 \node[font=\footnotesize\bfseries] at (4.0,2.5) {emergent partition (no explicit mask)};
-\draw[{Latex[length=2mm]}-{Latex[length=2mm]}, black!55] (3.3,2.2) -- (4.7,2.2);
 \end{tikzpicture}
