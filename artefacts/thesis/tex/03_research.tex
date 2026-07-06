@@ -1083,11 +1083,18 @@ per-frame transfer.
 
 \begin{figure}[!ht]
     \centering
-    \resizebox{\textwidth}{!}{\input{res/03_research/tikz/rendering}}
+    \resizebox{0.9\textwidth}{!}{\input{res/03_research/tikz/rendering}}
     \caption{The merge renderer pre-loads all frames as Gaussian nodes (only the
     current one visible) plus a permanently visible background node. Stepping or
     playing toggles visibility, avoiding any per-frame re-upload.}
     \label{fig:merge-timeline}
+\end{figure}
+
+\begin{figure}[!b]
+    \centering
+    \includegraphics[width=0.9\linewidth]{res/03_research/blender_room/viser_renderer.png}
+    \caption{Browser GUI temporal rendering engine implemented using viser. On the upper right corner controls can be seen, which allow the user to play through the entire animation with a given framerate. }
+    \label{fig:viser-gui}
 \end{figure}
 
 On top of this mechanism the renderer exposes the
@@ -1097,9 +1104,8 @@ halts, an adjustable playback rate in frames per second, and a frame slider with
 single-step buttons for advancing one frame at a time. Because the underlying frame
 switch is a visibility toggle, all of these operate at no rendering cost beyond drawing
 the single visible frame, whether continuous playback at a chosen rate, looping, or
-manual frame-by-frame scrubbing while paused.
-
-\textcolor{red}{ADD SCREEN OF THE INTERACTIVE VIEW}
+manual frame-by-frame scrubbing while paused. The viser GUI can be seen on Figure \ref{fig:viser-gui}.
+Because the rendering is delegated to the machine which runs the server, it can be delegated to a powerful GPU node, where the viewing and scene navigation could be controlled from a budget machine.
 
 \newpage
 
