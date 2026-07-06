@@ -87,13 +87,11 @@ def fig_bgsub_sweep():
         ax.plot(thr, [m[key] for m in sw["no_morph"]], color=color, marker="o", ms=3,
                 linestyle="--", alpha=0.45)
     ax.axvline(0.06, color=GRAY, linestyle=":", linewidth=1.1)
-    ax.text(0.066, 1.03, "chosen $\\tau_s$", color=GRAY, fontsize=7.5, va="top")
+    ax.text(0.066, 0.32, "chosen $\\tau_s$", color=GRAY, fontsize=7, rotation=90, va="bottom", ha="left")
     ax.set_xlabel("change threshold $\\tau_s$")
     ax.set_ylabel("mask quality vs. ground truth")
     ax.set_ylim(0, 1.05)
-    ax.legend(frameon=False, loc="lower left", fontsize=7,
-              title="solid: full morphology\ndashed: raw threshold", title_fontsize=6.5,
-              alignment="left")
+    ax.legend(frameon=False, loc="lower left", fontsize=7)
     ax.set_title("(a) threshold sweep", fontsize=9.5)
 
     es = d.get("erosion_sweep")
@@ -131,7 +129,7 @@ def fig_hull_init():
     d = _load(Path("experiments/outputs/hull_init/hull_init_benchmark.json"))
     if d is None:
         return
-    fig, axes = plt.subplots(1, 2, figsize=(6.3, 2.7))
+    fig, axes = plt.subplots(1, 2, figsize=(6.3, 2.9), constrained_layout=True)
     arms = (("hull", BLUE, "visual-hull seed"), ("random", RED, "random seed (same budget)"))
     d50 = _load(Path("experiments/outputs/hull_init_50k/hull_init_benchmark.json"))
 
@@ -143,7 +141,6 @@ def fig_hull_init():
                 alpha=0.6, label="random seed ($30\\times$ budget)")
     ax.set_xlabel("frame-0 optimization step")
     ax.set_ylabel("object PSNR [dB]")
-    ax.legend(frameon=False, loc="lower right", fontsize=7.5)
     ax.set_title("(a) reconstruction quality")
 
     ax = axes[1]
@@ -155,8 +152,11 @@ def fig_hull_init():
         ax.set_yscale("log")
     ax.set_xlabel("frame-0 optimization step")
     ax.set_ylabel("number of Gaussians")
-    ax.legend(frameon=False, loc="center right", fontsize=7.5)
     ax.set_title("(b) primitive count")
+
+    # One shared legend below both panels (the line identities are common to (a) and (b)).
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, frameon=False, ncol=3, fontsize=7.5, loc="outside lower center")
     _save(fig, "hull_init.pdf")
 
 
@@ -184,7 +184,6 @@ def fig_velocity():
     ax.text(vel.mean() + 6, ax.get_ylim()[1] * 0.8, f"mean {vel.mean():.0f}", color=BLUE, fontsize=8.5)
     ax.set_xlabel("steps to 20 dB object PSNR")
     ax.set_ylabel("number of frames")
-    ax.legend(frameon=False)
     ax.set_title("(a) steps to a fixed quality target")
 
     if dp is not None:
@@ -198,8 +197,11 @@ def fig_velocity():
             ax.axvline(v, color=c, linestyle="--", linewidth=1.6)
         ax.set_xlabel("converged object PSNR [dB]")
         ax.set_ylabel("number of frames")
-        ax.legend(frameon=False, loc="upper left")
         ax.set_title("(b) converged quality per frame")
+
+    # One shared legend below the panels (colors are common to (a) and (b)).
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, frameon=False, ncol=2, loc="outside lower center")
     _save(fig, "velocity_convergence.pdf")
 
 

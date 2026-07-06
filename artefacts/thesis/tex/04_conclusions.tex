@@ -1,6 +1,177 @@
 \chapter{Conclusions}
-\begin{enumerate}
-    \item Podsumowanie.
-    \item Możliwości dalszego rozwoju.
-    \item Potencjalne obszary zastosowania pracy.
-\end{enumerate}
+\label{ch:conclusions}
+
+\section{Summary}
+\label{sec:conclusions-summary}
+
+The goal of this work was to reconstruct a dynamic indoor scene as a time-varying
+field of Gaussian primitives that can be rendered interactively from any viewpoint
+and at any instant of the captured time. The static variant of this problem is by
+now well understood, and the thesis therefore concentrated on the part that is not.
+A scene in which a subject moves while the surrounding room stays fixed poses three
+coupled difficulties. The reconstruction must represent the same physical surface
+across time rather than an unrelated cloud of primitives per frame. It must explain
+image changes by motion rather than by repainting, because a purely photometric loss
+cannot tell the two apart. And its cost must scale with the complexity of the motion
+rather than with the length of the capture, because otherwise every additional
+second of video multiplies both the training time and the storage.
+
+The proposed answer rests on one organizing decision, the separation of the scene
+into a static background and a dynamic foreground, each reconstructed with the
+machinery best suited to it. The background is fitted once by an unmodified
+Gaussian Splatting baseline from a single orbiting camera and reaches a held-out
+quality of over $40$\,dB, which confirms that the static half of the problem needed
+no new research. The foreground is observed by four fixed, calibrated cameras and
+is reconstructed by a custom temporal method built inside the nerfstudio framework.
+The method fits a dense cloud on the first frame and then tracks that one cloud
+through the remaining frames under two hard constraints. The number of primitives
+never changes, and the colour of every primitive stays frozen at its first-frame
+value. Under these constraints the only way the optimizer can lower the loss is to
+move and reshape the primitives, so the reconstruction is forced to follow the
+subject's actual motion. Each frame is warm-started by a constant-velocity
+extrapolation of the previous motion, which was measured to cut the steps needed to
+reach a fixed quality target by $84$ percent and to lift the converged per-frame
+quality by almost six decibels. Primitives that stray from the subject are
+reclaimed at every frame boundary by snapping them back onto the visual hull carved
+from the camera silhouettes, with a distance margin that reserves this intervention
+for genuine runaways.
+
+A deliberate feature of the pipeline is that it contains no learned component
+anywhere. The subject is isolated from the room by comparing every frame against a
+single photograph of the empty room. The initial study of this idea exposed a
+camouflage weakness where the subject visually resembles the background, and the
+final version of the segmentation resolves it with a shadow-aware hysteresis rule.
+Weak evidence of change is admitted only when it cannot be explained as a cast
+shadow and when it is spatially connected to strong evidence. This raised the mask
+intersection-over-union from $0.863$ to $0.962$ against ground truth silhouettes
+and healed the silhouette holes that previously fragmented the reconstruction in
+the early frames. The same silhouettes seed the first frame through a carved visual
+hull, and the experiments showed this seed to be a hard requirement rather than a
+convenience. A random initialization with the same primitive budget does not merely
+converge more slowly, it collapses outright under the masked losses, while matching
+the hull's quality by brute force costs several times as many primitives.
+
+Because the tracked representation holds its population and its colours constant,
+every remaining attribute becomes a smooth time series, and the thesis exploited
+this twice. A temporal smoothness prior in the optimizer damps the frame-to-frame
+fluctuation of opacity, scale and rotation by up to two orders of magnitude without
+touching the genuine motion of the positions. A frequency-domain compressor then
+stores each attribute as a truncated cosine transform along time, which shrinks the
+full sequence by a factor of $43$ at matched render fidelity. The final measured
+configuration reconstructs the complete $150$-frame capture at full HD resolution
+in under eight minutes on a single GPU, reaching the best structural quality of any
+configuration evaluated in the thesis, with background leakage more than an order
+of magnitude below the earlier baseline. A dedicated web renderer recombines the
+per-frame foreground with the static background and plays the result back smoothly,
+because switching frames costs only a visibility toggle rather than a data upload.
+
+The evaluation was designed to be honest about its own limits. All object-level
+fidelity numbers are bounded by an illumination gap that is a property of the
+ground truth rather than of the method, since hiding the room in the reference
+renders also removes the light the room bounces onto the subject. The structural
+metrics, coverage, leakage and cloud extent therefore carried the discriminating
+signal, and every mechanism of the method was validated by producing its failure
+mode on demand and measuring the repair.
+
+\section{Possible Further Development}
+\label{sec:conclusions-future}
+
+The most consequential next step is the move from synthetic to real captures. The
+synthetic environment was chosen deliberately, because exact camera poses make the
+measured tracking error attributable to the method alone, and that property made
+the controlled experiments of Chapter~\ref{ch:research} possible. A real capture
+gives up this exactness. Poses must be estimated, lenses distort, sensors add
+noise, and exposure drifts between frames. The pose problem is the deepest of
+these, because a pose error and a scene motion produce the same kind of image
+change, and the thesis argued that pose noise is silently absorbed into the
+estimated motion. A practical route would keep the fixed-camera rig, calibrate it
+once with standard photogrammetric targets, and treat the small residual error as a
+per-camera bias to be estimated jointly with the first frame. The background
+subtraction should transfer to real footage with modest changes, since it already
+handles soft shadows and indirect light, but sensor noise will demand a
+noise-adaptive threshold and the empty-room plate may need periodic refreshing
+under changing daylight.
+
+A second direction concerns the constant-topology assumption itself. Holding the
+primitive count fixed is what makes velocity, trajectories and temporal
+compression well defined, but it also means the method cannot represent a subject
+that enters the scene midway, an object that is picked up and carried, or a person
+who leaves. A principled extension would allow topology events at explicit,
+detected instants. The silhouette machinery already provides the detection signal,
+because a new subject appears as a connected region of change that no existing
+primitive explains. Spawning a new, independently tracked cloud for that region
+would preserve the per-cloud invariants while lifting the global restriction, and
+the compressor would treat each cloud as its own sequence.
+
+The compression study points at a third opportunity. After the smoothness prior,
+the positions, opacities and scales compress into a handful of coefficients each,
+and the remaining cost is concentrated almost entirely in the rotation channels.
+Quaternions resist truncation for a structural reason, since the same physical
+rotation has two sign representations and componentwise smoothing ignores the
+manifold they live on. Enforcing sign continuity along time, or compressing in a
+tangent space around the previous rotation, should release most of that remaining
+budget. Beyond rate, the natural target is streaming. The current renderer holds
+every frame resident, which is comfortable at the measured sizes but not for
+captures that run into the thousands of frames. A windowed loader that decodes the
+cosine coefficients on the fly would turn the stored representation directly into
+a playable stream.
+
+Several smaller extensions follow the measurements of the results chapter. The
+per-frame tracking budget is still a fixed constant, yet the convergence
+histograms show that most frames finish long before it is exhausted. Coupling the
+early-stopping criterion that already exists in the implementation to the training
+schedule would convert the measured headroom into further wall-clock savings
+without any quality risk. The constant-velocity motion model could be raised to
+second order or replaced by a small temporal filter, which the measured
+acceleration residuals suggest would shrink the remaining warm-start error on
+fast direction changes. Finally, the illumination gap that limited the evaluation
+invites a relightable extension. Because the subject is reconstructed against
+black, its appearance currently bakes in the capture lighting. Estimating a
+low-order lighting model for the room and dividing it out of the frozen colours
+would let the merged scene relight the subject consistently as it moves.
+
+\section{Applications of the Work}
+\label{sec:conclusions-applications}
+
+The most direct application of the pipeline is volumetric video. The output of the
+method is a sequence of self-contained Gaussian clouds that any modern splatting
+viewer can render, and the measured compression brings a full capture down to a
+few tens of megabytes, which is well inside the budget of ordinary web delivery.
+The included renderer demonstrates the complete playback path in a browser, with
+scrubbing and framerate control, and the rendering server can run remotely so that
+a thin client only carries the interaction. This makes the system a working
+prototype of a free-viewpoint replay tool for telepresence, remote inspection and
+immersive media, where a viewer chooses their own camera path through a recorded
+performance.
+
+A second family of applications follows from a property that image-based dynamic
+reconstruction methods usually lack. Because the primitive set is conserved, the
+reconstruction is simultaneously a dense set of point trajectories, and the thesis
+showed these trajectories to be coherent enough to read the subject's motion
+directly. This opens the door to quantitative motion analysis on top of an
+ordinary multi-camera recording. Gait analysis in rehabilitation, technique study
+in sport, and ergonomic assessment on a factory floor all need exactly this kind
+of dense, markerless trajectory field, and the fixed calibrated rig the method
+assumes is a realistic setup for all three environments.
+
+The static-dynamic decomposition also matches the structure of virtual production
+and previsualization work in film and interactive media. A set is scanned once at
+high quality, performances are captured separately with a small rig, and the two
+are recombined freely, with each take of a performance becoming an asset that can
+be replayed over the same background from any viewpoint. The same decomposition
+serves digital-twin scenarios, where a factory hall or a laboratory is
+reconstructed once and moving elements are tracked live against it, and it serves
+the simulation side of robotics, where recorded human motion inside a known static
+environment provides realistic dynamic obstacles for navigation and manipulation
+policies to train against.
+
+Finally, the methodological contributions apply beyond the specific system. The
+shadow-aware hysteresis segmentation is a self-contained improvement to classical
+background subtraction and is usable wherever a static camera watches a scene with
+difficult, camouflaged foregrounds. The visual-hull seeding and the demonstration
+that random initialization fails under masked losses are relevant to any
+silhouette-supervised splatting pipeline. And the central lesson of the thesis,
+that holding topology and appearance fixed turns a hard inverse problem into a
+tractable tracking problem while simultaneously making the result compressible,
+is a design pattern for dynamic scene representation in general rather than a
+detail of this implementation.

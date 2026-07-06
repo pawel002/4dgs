@@ -273,6 +273,45 @@ away unless all four cameras agree on it (which a cast shadow on the floor does 
 --pipeline.datamanager.dataparser.bg-subtract-threshold 0.15
 ```
 
+### Shadow-aware hysteresis segmentation (`bg-subtract-mode hysteresis`)
+
+The single global threshold has a failure mode no value of it can fix: **camouflage**.
+Where the subject's colours locally match the background (the mannequin's legs over the
+rug in the early frames), the plate-difference is *weak but nonzero* — lowering the
+threshold enough to admit it also admits the cast shadow and bounce light, which live in
+the same magnitude band. The `hysteresis` mode separates the two kinds of weak evidence
+by the two properties magnitude discards:
+
+1. **Photometric signature (shadow veto).** A cast shadow *scales illumination down*:
+   luminance drops, chromaticity (colour direction, `I/lum(I)`) stays put. A weak pixel
+   is kept only if its chromaticity moved by more than `bg-subtract-chroma-threshold`
+   vs the plate, or it got *brighter* (which a shadow cannot do).
+2. **Connectivity (hysteresis).** Pixels with `d > bg-subtract-threshold` (the *high*
+   threshold in this mode) are kept unconditionally; surviving weak pixels
+   (`d > bg-subtract-low-threshold`) join only if geodesically **connected** to strong
+   evidence (reconstruction-by-dilation to a fixpoint, run on the GPU). Camouflaged
+   body parts are attached to the confidently detected torso and get in; free-floating
+   bounce-light islands don't.
+
+Measured against the ground-truth silhouettes over all 150 frames x 4 cameras
+(`experiments/seg_full_eval.py`): **IoU 0.962 / precision 0.986 / recall 0.975 /
+segmented-image PSNR 33.8 dB**, vs 0.863 / 0.935 / 0.918 / 30.6 dB for the tuned
+single-threshold production setting — and the *worst* frame improves from IoU 0.77 to
+0.91 (the camouflage window is essentially healed; see
+`experiments/outputs/bgsub/seg_variants.json` for the variant sweep + ablations:
+hysteresis *without* the shadow veto floods through the contact shadow, precision 0.37;
+the veto *without* connectivity reaches IoU 0.942 — both parts needed). The result is
+also insensitive to the high threshold (identical IoU for tau_hi in 0.08–0.12), which
+removes the pipeline's most delicate tuning knob.
+
+```bash
+--pipeline.datamanager.dataparser.bg-subtract-mode hysteresis \
+--pipeline.datamanager.dataparser.bg-subtract-threshold 0.1 \
+--pipeline.datamanager.dataparser.bg-subtract-dir images_bgsub_hyst
+```
+
+(Use a dedicated `bg-subtract-dir` per mode so caches don't clobber each other.)
+
 ## The algorithm and the optimizations implemented
 
 Training is a single, monotonically increasing step sequence partitioned into
@@ -500,6 +539,8 @@ The viewer reads the **same per-frame ply layout** the trainer writes (and that
 | `--pipeline.model.use-velocity-prediction` | `True` | Linear `x_t += x_{t-1} - x_{t-2}` extrapolation between frames |
 | `--pipeline.model.snap-strays-to-hull` | `True` | Each frame, snap gaussians outside the mask-intersection back onto the hull (reclaims strays, fixes runaway) |
 | `--pipeline.model.snap-min-view-fraction` | `1.0` | Snap a gaussian if inside fewer than this fraction of masks (`1.0` = not inside all) |
+| `--pipeline.model.snap-distance-margin` | `0.0` | Distance-field clamping: snap a flagged gaussian only if it is farther than this many hull-voxel sizes from the hull (0 = snap all flagged) |
+| `--pipeline.model.temporal-smoothness-lambda` | `0.0` | L2 anchor pulling opacity/scale/quat towards their previous-frame converged values during tracking (0 = off) |
 | `--pipeline.model.hull-snap-resolution` | `96` | Voxel grid resolution for the per-frame hull used as snap targets |
 | `--pipeline.model.velocity-mask-gating` | `True` | Fallback when snapping is off: zero stray velocity (stops coasting but leaves behind) |
 | `--pipeline.model.velocity-gate-min-view-fraction` | `0.5` | (Gating only) fraction of cameras a gaussian must project onto to keep its velocity |
@@ -515,7 +556,10 @@ The viewer reads the **same per-frame ply layout** the trainer writes (and that
 | `--pipeline.model.mask-threshold` | `0.05` | GT brightness above which a pixel is object foreground |
 | `--pipeline.model.mask-dilate` | `3` | Silhouette dilation (px); defines the don't-care band at the edge |
 | `--pipeline.datamanager.dataparser.bg-subtract` | `True` | Segment the subject by background subtraction when a `0000.png` plate is present (no model) |
-| `--pipeline.datamanager.dataparser.bg-subtract-threshold` | `0.1` | Per-pixel change magnitude (mean abs RGB diff vs the plate) above which a pixel is object |
+| `--pipeline.datamanager.dataparser.bg-subtract-mode` | `threshold` | `threshold` = single global threshold; `hysteresis` = shadow-aware two-band segmentation (see above) |
+| `--pipeline.datamanager.dataparser.bg-subtract-low-threshold` | `0.01` | (hysteresis) weak-evidence floor |
+| `--pipeline.datamanager.dataparser.bg-subtract-chroma-threshold` | `0.04` | (hysteresis) min chromaticity change for a darkened weak pixel to count as object, not shadow |
+| `--pipeline.datamanager.dataparser.bg-subtract-threshold` | `0.06` | Per-pixel change magnitude (mean abs RGB diff vs the plate) above which a pixel is object (the *high* threshold in hysteresis mode, where `0.1` is used) |
 | `--pipeline.datamanager.dataparser.bg-subtract-open` | `1` | Morphological-opening radius (px) to remove speckle/shadow fringe (0 = off) |
 | `--pipeline.datamanager.dataparser.bg-subtract-dilate` | `2` | Dilate the final object mask by N px so soft edges are kept |
 | `--pipeline.datamanager.dataparser.init-visual-hull` | `True` | Seed gaussians from the carved visual hull instead of randomly |
@@ -698,6 +742,43 @@ Snapping keeps the object solid and higher-quality, and the advantage **widens o
 (snapping is ~+1.5 dB and +0.16 coverage by frame 15) — i.e. it directly counteracts the
 left-behind degradation. The cloud also stays tight (no runaway).
 
+### Distance-field clamping (`snap-distance-margin`)
+
+The strict projective stray test is **binary in exactly the way the masks are not
+reliable**: a gaussian one pixel outside a noisy mask boundary (or in a residual
+silhouette hole) fails it just like one that coasted ten subject radii away — and on
+imperfect masks it flags a large fraction of the cloud every frame (~half on the
+flagship run), teleporting locally-converged geometry that the next tracking block must
+rebuild. With `--pipeline.model.snap-distance-margin D` (in hull-voxel units, e.g.
+`2.0`), the projective test only *nominates* candidates; a candidate is snapped only if
+its 3D distance to the nearest hull voxel exceeds `D` voxel sizes. Geometrically the
+hull gets a margin shell: borderline gaussians inside the shell are left to the
+photometric optimizer (which, unlike the binary test, has gradient information), true
+runaways beyond it are still reclaimed. Costs nothing extra — the nearest-voxel distance
+is already computed to find the snap target. Per-frame `flagged` vs `snapped` counts are
+written to `temporal_frames/temporal_stats.json` for any run.
+
+### Temporal attribute smoothness (`temporal-smoothness-lambda`)
+
+Between the frozen (colour, count) and the moving (positions) parameters sit opacity,
+scale and rotation: trainable by necessity, but for a rigid subject their *true*
+per-frame evolution is small. A generous tracking budget lets SGD wander them around
+their optimum, so their converged per-frame values **jitter** — invisible per frame,
+but it flickers in playback and fills the attribute time series with high-frequency
+energy that the DCT compressor cannot truncate (its opacity/scale/rot channels saturate
+the coefficient cap). `--pipeline.model.temporal-smoothness-lambda L` adds an L2 anchor
+pulling opacity logits, log-scales and quats towards their **previous frame's converged
+values** during tracking (positions exempt — their change is the genuine motion). This
+is the compressor's smoothness prior moved into the optimizer, where it damps the noise
+at the source. `L=0.3` was selected by a 40-frame pilot sweep over {0.3, 1.0, 3.0}:
+jitter suppression saturates at the smallest weight while the structural cost keeps
+growing with `L` (object SSIM 0.827 -> 0.814/0.799/0.789 for L=0.3/1/3). On the full
+150-frame run at L=0.3: opacity jitter 0.224 -> 0.0012 logits/frame (~180x), scale ~78x,
+rotation ~5x, position (deliberately exempt) unchanged; compression at q=0.999 improves
+27.8x@26.2dB -> 43.5x@27.0dB (opacity/scale collapse from the 64-coeff cap to K<=2;
+quats still cap). Solo cost is SSIM 0.833 vs 0.854 — absorbed entirely in the combined
+`imp_full` config (0.858). Object PSNR unaffected in all arms.
+
 ### Tuning
 
 - Snap only clearly-drifted gaussians (gentler, leaves dark in-object regions alone) → lower
@@ -743,20 +824,27 @@ point, recording the steps each frame needs, and plots the per-frame distributio
 overlaid histograms with the means marked.
 
 ```bash
-CUDA_HOME=/usr/local/cuda-12.4 PATH=/usr/local/cuda-12.4/bin:$PATH CUDA_VISIBLE_DEVICES=0 \
+CUDA_HOME=/usr/local/cuda-12.4 PATH=/usr/local/cuda-12.4/bin:$PATH CUDA_VISIBLE_DEVICES=4 \
   .venv/bin/python experiments/velocity_early_stopping.py \
-    --data ../output --num-frames 40 --target-psnr 20.0 --camera-res-scale-factor 0.25
+    --data ../output/dataset --num-frames 40 --target-psnr 20.0 --camera-res-scale-factor 0.25 \
+    --initial-iterations 3000 --snap-distance-margin 2.0 \
+    --bg-subtract-mode hysteresis --bg-subtract-threshold 0.1 --bg-subtract-dir images_bgsub_hyst \
+    --output-dir experiments/outputs/velocity_target
 ```
 
-Outputs `experiments/outputs/velocity_convergence_histogram.png` and a summary JSON.
-Use `--target-psnr X` for a same-quality comparison (steps to reach X dB — the fairest
-reading of "same metric value"), or omit it for the plateau criterion. **Result on the
-room data** (40 frames, target = 20 dB object PSNR): velocity prediction reached the
-target in a mean of **~20 steps/frame** vs **~175 steps/frame** without it — about
-**89% fewer steps** — and every frame reached the target under both conditions. (With the
-plateau criterion instead, velocity also converges to substantially higher quality:
-~31 dB vs ~21 dB, because without a warm start the per-frame fit drifts and plateaus at a
-worse solution.)
+Outputs `velocity_convergence_histogram.png` and a summary JSON into `--output-dir`
+(`experiments/outputs/velocity_target` and `velocity_plateau` are what `make_figures.py`
+reads). The script accepts the improved-pipeline knobs (`--bg-subtract-mode`,
+`--snap-distance-margin`, `--temporal-smoothness-lambda`). Use `--target-psnr X` for a
+same-quality comparison (steps to reach X dB — the fairest reading of "same metric
+value"), or omit it for the plateau criterion. **Result on the room data** (2026-07-06
+rerun under the improved pipeline: hysteresis masks, margin 2.0, N0=3000; 40 frames,
+target = 20 dB object PSNR): velocity prediction reached the target in a mean of
+**23 steps/frame** vs **145 steps/frame** without it — about **84% fewer steps** — and
+every frame reached the target under both conditions (max 59 vs 282 steps, none hit the
+400-step cap). With the plateau criterion instead, velocity also converges to
+substantially higher quality: **29.3 dB vs 23.4 dB**, because without a warm start the
+per-frame fit drifts and plateaus at a worse solution.
 
 ## Temporal compression of the per-frame `.ply` files
 
@@ -853,6 +941,10 @@ PSNR vs GT (15.3-19.8 per frame). Read all object-PSNR numbers against that refe
 | `experiments/compression_benchmark.py` | Quality sweep of `temporal_compress.py`: disk ratio + render PSNR, per-attribute K |
 | `experiments/make_figures.py` | All matplotlib result figures as PNG (rerunnable; skips missing JSONs) |
 | `experiments/make_qualitative.py` | PNG image figures: bg-sub montage, GT-vs-render montage, merged composite, trajectories |
+| `experiments/seg_variants_benchmark.py` | Sweep of segmentation *variants* (mean/max diff, hysteresis ± shadow veto ± connectivity) vs GT masks (GPU) |
+| `experiments/seg_full_eval.py` | Full 150x4 mask eval of the production vs hysteresis operating points (the thesis numbers) |
+| `experiments/attribute_jitter.py` | Frame-to-frame mean abs change of position/opacity/scale/rotation from a `temporal_frames/` dir (CPU) |
+| `experiments/make_improvement_figures.py` | Figures for the improvement experiments (seg variants/montage, snap margin, smoothness, end-to-end) |
 
 Headline numbers (150 frames, 1080p, N0=10k/Nt=3k, tuned segmentation, RTX 6000 Ada):
 71 min end-to-end, 11 561 gaussians (2.9 MB/frame, 430 MB), object PSNR 17.87 dB (above the
@@ -862,10 +954,12 @@ Old-segmentation flagship (`full150_base`): 16.13 dB / 0.783 — the retuned mas
 no snapping -> runaway extent 33.9; gating -> parked strays, worst SSIM 0.651 + leak 8.7e-3;
 full-image loss -> background floods to opacity 0.99 by the last frame (PSNR decays to 10.5);
 frozen opacity (no snap) -> SSIM 0.606; free colours -> f_dc drift 1.75 for no PSNR gain;
-no velocity at Nt=3000 -> same end quality (velocity = efficiency: 62 vs 224 steps to 20 dB,
-72% fewer; plateau quality 24.6 vs 20.0 dB at a 400-step cap). Hull seed 1643->5900 @38.8 dB;
-equal-budget random collapses to 5.9 dB; 50k random reaches 42.4 dB but needs 69k prims
-(~12x). Compression on this run: 430 MB -> 15.5 MB (27.8x) @ 26.2 dB with q=0.999 (colours
+no velocity at Nt=3000 -> same end quality (velocity = efficiency at generous budgets; the
+2026-07-06 rerun under the improved pipeline measures 23 vs 145 steps to 20 dB, 84% fewer,
+plateau 29.3 vs 23.4 dB — and at the adopted Nt=300 budget velocity becomes load-bearing).
+Hull-init (2026-07-06 rerun, hysteresis masks): hull seed 1631->18973 @41.7 dB, passes 30 dB
+by ~step 950; equal-budget random collapses to 5.9 dB (686 prims); 50k random reaches
+45.1 dB but needs 67k prims (~3.5x). Compression on this run: 430 MB -> 15.5 MB (27.8x) @ 26.2 dB with q=0.999 (colours
 lossless via constant mode; opacity/scale/rot hit the 64-coeff cap — the 3k-step budget makes
 non-positional channels noisier, hence lower ratio than short-budget runs). Background
 splatfacto (dynamic1, 240 poses): 40.7 dB / 0.989 SSIM held-out (unchanged run `thesis`).
@@ -873,3 +967,53 @@ splatfacto (dynamic1, 240 poses): 40.7 dB / 0.989 SSIM held-out (unchanged run `
 Remaining known limitation: residual camouflage holes vs the rug in early frames (reduced by
 the tuned setting, not eliminated); strict snap test still flags ~half the cloud per frame on
 imperfect masks (a majority test rho_s<1 would be gentler).
+
+---
+
+# Improvement campaign (2026-07-06)
+
+Three mechanisms added on top of the v2 pipeline, each targeting one of its measured
+limitations (all config-gated; defaults preserve the legacy behaviour). Runs under
+`splats/thesis/<name>/temporal-splatfacto/imp/`; eval JSONs in `experiments/outputs/eval/`;
+figures via `experiments/make_improvement_figures.py` (seg_variants, seg_montage_improved,
+snap_margin, smoothness, budget_sweep, improved_summary — all PNG into the thesis res dir).
+
+**Headline (150 frames, full res, N0=10k/Nt=3k):**
+
+| run | mechanisms | N | SSIM | leak | notes |
+|---|---|---|---|---|---|
+| `full150` (baseline) | — | 11 561 | 0.854 | 1.3e-3 | v2 reference |
+| `imp_seg` | hysteresis seg | 23 684 | 0.878 | 2.5e-5 | best solo; 2x primitives; camouflage window healed (first-20 SSIM 0.882 vs 0.830) |
+| `imp_snapfield` | snap margin | 10 806 | 0.788 | 1.2e-3 | **hurts alone** — on noisy masks the blunt clamp was load-bearing |
+| `imp_smooth` | smoothness λ=0.3 | 10 892 | 0.833 | 1.1e-3 | jitter -180x opacity; compression 27.8x->43.5x @ matched PSNR |
+| `imp_full` | all three | 12 485 | **0.858** | 6.0e-5 | best overall; snaps drop to ~900/frame (10x fewer); 42.9x compression |
+
+Key interaction: margin and hysteresis are complementary — the margin filters the *response*
+to a noisy stray test, hysteresis cleans its *input*; alone the margin exposes mask noise
+(SSIM 0.788), together they cut nominations 75%->22% of the cloud and teleports by 10x while
+reaching the best SSIM. Per-frame snap diagnostics: `temporal_frames/temporal_stats.json`.
+
+**Iteration-budget sweep (improved config, full 150 frames):** quality is FLAT across a
+9.3x wall-clock range — `10k/3k` 72.8 min SSIM 0.858; `5k/1000` 23.7 min 0.860; `5k/500`
+12.8 min 0.855; `3k/300` **7.8 min** 0.857 (all: coverage ~0.998, leak ~6e-5). Frame-0
+converges by ~3–5k steps (38–39 dB; the extra 7k steps buy ~1 dB while densification
+quadruples the cloud — see `experiments/outputs/hull_init/frame0_convergence_hyst.json`).
+
+**Recommended default protocol for experiments** (adopted in the thesis):
+
+```bash
+--pipeline.model.initial-iterations 3000 \
+--pipeline.model.tracking-iterations 300 \
+--pipeline.datamanager.initial-iterations 3000 \
+--pipeline.datamanager.tracking-iterations 300 \
+--pipeline.datamanager.dataparser.bg-subtract-mode hysteresis \
+--pipeline.datamanager.dataparser.bg-subtract-threshold 0.1 \
+--pipeline.datamanager.dataparser.bg-subtract-dir images_bgsub_hyst \
+--pipeline.model.snap-distance-margin 2.0 \
+--pipeline.model.temporal-smoothness-lambda 0.3
+```
+
+~8 min for 150 frames at 1080p on one RTX 6000 Ada (vs ~73 min at the old 10k/3k), same
+quality, and the smaller cloud (~6k gaussians) halves the per-frame files. Caveat: the small
+Nt only works *because* velocity prediction is on — at Nt=300 a cold start cannot re-traverse
+the inter-frame motion, so don't combine this budget with `--use-velocity-prediction False`.

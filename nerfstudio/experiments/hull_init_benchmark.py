@@ -38,6 +38,13 @@ class Config:
     matched_budget: int = -1
     """Random-init budget; -1 = match the hull's seed count."""
     output_dir: Path = Path("experiments/outputs/hull_init")
+    output_name: str = "hull_init_benchmark.json"
+    hull_only: bool = False
+    """Skip the random arm (e.g. when only the hull convergence curve is needed)."""
+    bg_subtract_mode: str = "threshold"
+    """Segmentation mode passed to the dataparser ('threshold' or 'hysteresis')."""
+    bg_subtract_threshold: float = 0.06
+    bg_subtract_dir: str = "images_bgsub_t06e2"
     device: str = "cuda"
     seed: int = 0
 
@@ -56,6 +63,9 @@ def build_pipeline(cfg: Config, use_hull: bool, num_random: int):
     trainer_cfg.pipeline.datamanager.dataparser.data = cfg.data
     trainer_cfg.pipeline.datamanager.dataparser.max_frames = 1
     trainer_cfg.pipeline.datamanager.dataparser.init_visual_hull = use_hull
+    trainer_cfg.pipeline.datamanager.dataparser.bg_subtract_mode = cfg.bg_subtract_mode
+    trainer_cfg.pipeline.datamanager.dataparser.bg_subtract_threshold = cfg.bg_subtract_threshold
+    trainer_cfg.pipeline.datamanager.dataparser.bg_subtract_dir = cfg.bg_subtract_dir
     trainer_cfg.pipeline.datamanager.camera_res_scale_factor = cfg.camera_res_scale_factor
     trainer_cfg.pipeline.model.initial_iterations = cfg.initial_iterations
     trainer_cfg.pipeline.model.tracking_iterations = 1
@@ -138,18 +148,19 @@ def fit_frame0(cfg: Config, use_hull: bool, num_random: int) -> Dict:
 def main(cfg: Config) -> None:
     cfg.output_dir.mkdir(parents=True, exist_ok=True)
     hull = fit_frame0(cfg, use_hull=True, num_random=1000)  # num_random unused when seeded
-    budget = cfg.matched_budget if cfg.matched_budget > 0 else hull["init_count"]
-    rand = fit_frame0(cfg, use_hull=False, num_random=budget)
     out = {
         "config": {k: str(v) for k, v in vars(cfg).items()},
         "hull": hull,
-        "random": rand,
     }
-    (cfg.output_dir / "hull_init_benchmark.json").write_text(json.dumps(out, indent=2))
-    CONSOLE.print(
-        f"[green]done[/green] hull: init={hull['init_count']} final PSNR={hull['final_psnr']:.2f} | "
-        f"random: init={rand['init_count']} final PSNR={rand['final_psnr']:.2f}"
-    )
+    if not cfg.hull_only:
+        budget = cfg.matched_budget if cfg.matched_budget > 0 else hull["init_count"]
+        out["random"] = fit_frame0(cfg, use_hull=False, num_random=budget)
+    (cfg.output_dir / cfg.output_name).write_text(json.dumps(out, indent=2))
+    msg = f"[green]done[/green] hull: init={hull['init_count']} final PSNR={hull['final_psnr']:.2f}"
+    if not cfg.hull_only:
+        rand = out["random"]
+        msg += f" | random: init={rand['init_count']} final PSNR={rand['final_psnr']:.2f}"
+    CONSOLE.print(msg)
 
 
 if __name__ == "__main__":

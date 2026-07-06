@@ -109,6 +109,14 @@ class TemporalSplatfactoModelConfig(SplatfactoModelConfig):
     """Voxel-grid resolution per axis for carving the per-frame hull used as snap targets."""
     hull_snap_max_points: int = 30000
     """Cap on hull voxels kept for nearest-surface snapping (subsampled if exceeded)."""
+    snap_distance_margin: float = 0.0
+    """Distance-field clamping: when > 0, a gaussian flagged by the projective stray test is
+    snapped only if its 3D distance to the nearest hull voxel exceeds this many *hull voxel
+    sizes*. The binary projective test treats a gaussian one pixel outside a noisy mask the
+    same as one that coasted ten radii away; the margin distinguishes them — borderline
+    gaussians (within the margin shell of the hull, typically flagged only because of residual
+    silhouette holes) are left for the optimizer, while genuine runaways beyond the shell are
+    still teleported back. 0 keeps the legacy behaviour (every flagged gaussian is snapped)."""
     freeze_colors_when_tracking: bool = True
     """Freeze SH colour coefficients (features_dc/features_rest) after frame 0. Keeps the
     per-gaussian colour constant across the video so tracking aligns gaussians to motion
@@ -120,6 +128,16 @@ class TemporalSplatfactoModelConfig(SplatfactoModelConfig):
     the object, which more strictly enforces the constant-gaussians/motion-only philosophy and
     further suppresses background fitting. Off by default to match the original train_video.py
     (which lets opacity adapt to occlusion/appearance changes between frames)."""
+    temporal_smoothness_lambda: float = 0.0
+    """Weight of the temporal attribute-smoothness regularizer. When > 0, every tracking step
+    adds an L2 penalty pulling the *non-positional* per-gaussian attributes (opacity logits,
+    log-scales, quaternions) towards their converged values of the previous frame. Positions
+    are exempt (their inter-frame change is the genuine motion, already handled by the
+    velocity warm start); the non-positional attributes of a rigid subject should evolve
+    slowly, and their per-frame fluctuation under a generous tracking budget is optimizer
+    noise, not signal. This is the temporal-compressor's smoothness prior moved into the
+    optimizer: it damps frame-to-frame attribute flicker at the source, which both stabilizes
+    renders and makes the attribute time series compressible. 0 disables (legacy behaviour)."""
     tracking_means_lr: float = 1.6e-4
     """Constant means learning rate used during tracking frames."""
     means_lr_init: float = 1.6e-4
@@ -209,6 +227,14 @@ class TemporalSplatfactoModel(SplatfactoModel):
         self._prev_means: Optional[torch.Tensor] = None
         self._prev_prev_means: Optional[torch.Tensor] = None
         self._colors_frozen: bool = False
+
+        # Temporal-smoothness anchor: the previous frame's converged non-positional
+        # attributes (opacity logits, log-scales, quats), towards which the regularizer pulls.
+        self._smooth_anchor: Optional[dict] = None
+
+        # Per-frame diagnostics (snap counts, velocity magnitude), dumped to
+        # temporal_stats.json next to the per-frame plys.
+        self.temporal_stats: dict = {"frames": {}}
 
         # Early-stopping state for per-frame tracking.
         self.early_stopper = EarlyStopper(
@@ -405,10 +431,29 @@ class TemporalSplatfactoModel(SplatfactoModel):
                 loss_dict["alpha_inside"] = (
                     self.config.alpha_inside_loss_lambda * ((1.0 - accum) * core).sum() / core.sum().clamp_min(1.0)
                 )
+
+        # Temporal attribute smoothness: pull the non-positional attributes towards their
+        # previous-frame converged values (the compressor's smoothness prior, applied at the
+        # source). Active only while tracking and only when an anchor of matching shape exists.
+        if self.training and self.config.temporal_smoothness_lambda > 0.0 and self._smooth_anchor is not None:
+            lam = self.config.temporal_smoothness_lambda
+            smooth = None
+            for name in ("opacities", "scales", "quats"):
+                anchor = self._smooth_anchor.get(name)
+                param = self.gauss_params[name]
+                if anchor is None or anchor.shape != param.shape:
+                    continue
+                term = ((param - anchor) ** 2).mean()
+                smooth = term if smooth is None else smooth + term
+            if smooth is not None:
+                loss_dict["temporal_smoothness"] = lam * smooth
         return loss_dict
 
     # ------------------------------------------------------------------ on-object test
-    @torch.no_grad()
+    def _frame_stat(self, frame_idx: int, key: str, value) -> None:
+        """Record a per-frame diagnostic (written to temporal_stats.json at frame save)."""
+        self.temporal_stats["frames"].setdefault(str(frame_idx), {})[key] = value
+
     @torch.no_grad()
     def _frame_view_masks(self, frame_idx: int):
         """List of (viewmat, K, mask2d, H, W) for every camera of ``frame_idx``; the dilated
@@ -458,15 +503,18 @@ class TemporalSplatfactoModel(SplatfactoModel):
         return self._count_inside(vm, self.means.detach()) >= needed
 
     @torch.no_grad()
-    def _carve_hull(self, view_masks, means: torch.Tensor) -> torch.Tensor:
+    def _carve_hull(self, view_masks, means: torch.Tensor):
         """Carve the visual hull (points inside EVERY camera mask) on a voxel grid spanning the
-        current gaussian cloud, and return up to ``hull_snap_max_points`` of those voxel centers."""
+        current gaussian cloud. Returns ``(hull_points, voxel_size)`` with up to
+        ``hull_snap_max_points`` voxel centers; ``voxel_size`` is the grid spacing (the length
+        unit of ``snap_distance_margin``)."""
         lo = torch.quantile(means, 0.01, dim=0)
         hi = torch.quantile(means, 0.99, dim=0)
         center = (lo + hi) / 2.0
         half = float((hi - lo).max()) / 2.0 * 1.2
         res = self.config.hull_snap_resolution
         lin = torch.linspace(-half, half, res, device=means.device)
+        voxel_size = float(2.0 * half / max(res - 1, 1))
         gx, gy, gz = torch.meshgrid(lin, lin, lin, indexing="ij")
         grid = torch.stack([gx.reshape(-1), gy.reshape(-1), gz.reshape(-1)], dim=-1) + center
         votes = self._count_inside(view_masks, grid)
@@ -474,14 +522,18 @@ class TemporalSplatfactoModel(SplatfactoModel):
         cap = self.config.hull_snap_max_points
         if hull.shape[0] > cap:
             hull = hull[torch.randperm(hull.shape[0], device=hull.device)[:cap]]
-        return hull
+        return hull, voxel_size
 
     @torch.no_grad()
     def _snap_strays_to_hull(self, frame_idx: int) -> int:
         """Snap every gaussian that is OUTSIDE the mask-intersection (visual hull) of
         ``frame_idx`` onto its nearest hull-surface voxel, so the frame starts with all
         gaussians inside the object. Also resets the velocity history of snapped gaussians so
-        the teleport is not counted as motion next frame. Returns the number snapped."""
+        the teleport is not counted as motion next frame. Returns the number snapped.
+
+        With ``snap_distance_margin > 0`` the projective stray test only *nominates*
+        candidates; a candidate is snapped only if it lies farther from the hull (in 3D) than
+        the margin, so borderline gaussians flagged by residual mask holes are left alone."""
         vm = self._frame_view_masks(frame_idx)
         if not vm:
             return 0
@@ -491,29 +543,36 @@ class TemporalSplatfactoModel(SplatfactoModel):
         votes = self._count_inside(vm, means)
         needed = max(1, int(round(self.config.snap_min_view_fraction * len(vm))))
         stray_idx = (votes < needed).nonzero(as_tuple=True)[0]
+        n_flagged = int(stray_idx.numel())
+        self._frame_stat(frame_idx, "flagged", n_flagged)
         if stray_idx.numel() == 0:
             return 0
-        hull = self._carve_hull(vm, means)
+        hull, voxel_size = self._carve_hull(vm, means)
         if hull.shape[0] == 0:
             return 0
         # nearest hull voxel per stray (chunked to bound memory)
         snapped = torch.empty((stray_idx.numel(), 3), device=means.device)
+        nn_dist = torch.empty(stray_idx.numel(), device=means.device)
         pts = means[stray_idx]
         for s in range(0, pts.shape[0], 4096):
             chunk = pts[s : s + 4096]
-            nn = torch.cdist(chunk, hull).argmin(dim=1)
-            snapped[s : s + 4096] = hull[nn]
+            d = torch.cdist(chunk, hull)
+            mins = d.min(dim=1)
+            snapped[s : s + 4096] = hull[mins.indices]
+            nn_dist[s : s + 4096] = mins.values
+        if self.config.snap_distance_margin > 0.0:
+            far = nn_dist > self.config.snap_distance_margin * voxel_size
+            stray_idx, snapped = stray_idx[far], snapped[far]
+            if stray_idx.numel() == 0:
+                self._frame_stat(frame_idx, "snapped", 0)
+                return 0
         self.means.data[stray_idx] = snapped
         if self._prev_means is not None and self._prev_means.shape == self.means.shape:
             self._prev_means[stray_idx] = snapped  # so next-frame velocity from here is ~0
+        self._frame_stat(frame_idx, "snapped", int(stray_idx.numel()))
         return int(stray_idx.numel())
 
     # ------------------------------------------------------------------ callbacks
-    def get_training_callbacks(self, training_callback_attributes):  # type: ignore[override]
-        # Capture the datamanager so the velocity callback can read per-frame cameras/masks.
-        pipeline = getattr(training_callback_attributes, "pipeline", None)
-        if pipeline is not None:
-            self._datamanager = getattr(pipeline, "datamanager", None)
     def get_training_callbacks(self, training_callback_attributes):  # type: ignore[override]
         # Capture the datamanager so the velocity callback can read per-frame cameras/masks.
         pipeline = getattr(training_callback_attributes, "pipeline", None)
@@ -553,6 +612,7 @@ class TemporalSplatfactoModel(SplatfactoModel):
                             velocity = velocity * on_object[:, None].to(velocity.dtype)
                             gated_note = f", froze velocity for {int((~on_object).sum())}/{on_object.numel()} strays"
                     self.means.data.add_(velocity)
+                    self._frame_stat(frame, "velocity_mean", float(velocity.norm(dim=1).mean()))
                 CONSOLE.log(
                     f"[temporal] frame {frame + 1}/{self.num_frames}: velocity prediction "
                     f"(mean |Δx|={velocity.norm(dim=1).mean().item():.6f}{gated_note})."
@@ -597,12 +657,31 @@ class TemporalSplatfactoModel(SplatfactoModel):
         if not self.schedule.is_last_step_of_frame(step):
             return
         frame = self.schedule.frame_of_step(step)
-        # Snapshot converged means for velocity prediction of the next frames.
+        # Snapshot converged means for velocity prediction of the next frames, and the
+        # converged non-positional attributes as the next frame's smoothness anchor.
         with torch.no_grad():
             self._prev_prev_means = self._prev_means
             self._prev_means = self.means.detach().clone()
+            if self.config.temporal_smoothness_lambda > 0.0:
+                self._smooth_anchor = {
+                    name: self.gauss_params[name].detach().clone() for name in ("opacities", "scales", "quats")
+                }
         if self.config.save_ply_per_frame:
             self._save_frame_ply(frame)
+        self._save_temporal_stats()
+
+    def _save_temporal_stats(self) -> None:
+        """Dump the per-frame diagnostics (flagged/snapped counts, ...) next to the plys."""
+        if self.temporal_ply_dir is None or not self.temporal_stats["frames"]:
+            return
+        import json
+
+        out_dir = Path(self.temporal_ply_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            (out_dir / "temporal_stats.json").write_text(json.dumps(self.temporal_stats, indent=1))
+        except OSError:  # diagnostics are best-effort, never break training
+            pass
 
     # ------------------------------------------------------------------ per-frame ply
     @torch.no_grad()

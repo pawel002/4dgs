@@ -78,6 +78,14 @@ class ExperimentConfig:
     """Apply the pipeline's per-frame hull snapping (reclaim strays onto the object) in BOTH
     conditions, so the experiment reflects the current method and isolates the effect of
     velocity prediction on top of it."""
+    bg_subtract_mode: str = "threshold"
+    """Segmentation mode passed to the dataparser ('threshold' or 'hysteresis')."""
+    bg_subtract_threshold: float = 0.06
+    bg_subtract_dir: str = "images_bgsub_t06e2"
+    snap_distance_margin: float = 0.0
+    """Distance-field snap margin (hull-voxel units) passed to the model."""
+    temporal_smoothness_lambda: float = 0.0
+    """Temporal attribute-smoothness weight passed to the model."""
     output_dir: Path = Path("experiments/outputs")
     """Where the histogram PNG and summary JSON are written."""
     device: str = "cuda"
@@ -215,9 +223,14 @@ def main(cfg: ExperimentConfig) -> None:
     trainer_cfg.pipeline.datamanager.dataparser.data = cfg.data
     trainer_cfg.pipeline.datamanager.dataparser.max_frames = cfg.num_frames
     trainer_cfg.pipeline.datamanager.camera_res_scale_factor = cfg.camera_res_scale_factor
+    trainer_cfg.pipeline.datamanager.dataparser.bg_subtract_mode = cfg.bg_subtract_mode
+    trainer_cfg.pipeline.datamanager.dataparser.bg_subtract_threshold = cfg.bg_subtract_threshold
+    trainer_cfg.pipeline.datamanager.dataparser.bg_subtract_dir = cfg.bg_subtract_dir
     trainer_cfg.pipeline.model.initial_iterations = cfg.initial_iterations
     trainer_cfg.pipeline.model.tracking_iterations = 1
     trainer_cfg.pipeline.model.background_color = "black"
+    trainer_cfg.pipeline.model.snap_distance_margin = cfg.snap_distance_margin
+    trainer_cfg.pipeline.model.temporal_smoothness_lambda = cfg.temporal_smoothness_lambda
     _OPT_CFG = trainer_cfg.optimizers
 
     pipeline = trainer_cfg.pipeline.setup(device=cfg.device, test_mode="val", world_size=1, local_rank=0)
