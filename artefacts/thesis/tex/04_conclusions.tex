@@ -19,9 +19,10 @@ second of video multiplies both the training time and the storage.
 The proposed answer rests on one organizing decision, the separation of the scene
 into a static background and a dynamic foreground, each reconstructed with the
 machinery best suited to it. The background is fitted once by an unmodified
-Gaussian Splatting baseline from a single orbiting camera and reaches a held-out
-quality of over $40$\,dB, which confirms that the static half of the problem needed
-no new research. The foreground is observed by four fixed, calibrated cameras and
+Gaussian Splatting baseline from a single orbiting camera, supplemented by the four
+empty-room photographs that the fixed rig records for segmentation, and reaches a
+held-out quality of almost $40$\,dB, which confirms that the static half of the
+problem needed no new research. The foreground is observed by four fixed, calibrated cameras and
 is reconstructed by a custom temporal method built inside the nerfstudio framework.
 The method fits a dense cloud on the first frame and then tracks that one cloud
 through the remaining frames under two hard constraints. The number of primitives

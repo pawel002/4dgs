@@ -962,7 +962,22 @@ by ~step 950; equal-budget random collapses to 5.9 dB (686 prims); 50k random re
 45.1 dB but needs 67k prims (~3.5x). Compression on this run: 430 MB -> 15.5 MB (27.8x) @ 26.2 dB with q=0.999 (colours
 lossless via constant mode; opacity/scale/rot hit the 64-coeff cap — the 3k-step budget makes
 non-positional channels noisier, hence lower ratio than short-budget runs). Background
-splatfacto (dynamic1, 240 poses): 40.7 dB / 0.989 SSIM held-out (unchanged run `thesis`).
+splatfacto: original run (dynamic1, 240 poses) `thesis` = 40.7 dB / 0.989 SSIM held-out.
+
+**Background with static plates (2026-07-17):** the 4 fixed cameras each record an empty-room
+frame-0 plate for segmentation; those plates are also genuine calibrated views of the room
+(from the corners, which the orbit undersamples), so they are merged into the background
+training set. `experiments/make_background_dataset.py` writes
+`output/dataset/background/transforms.json` (240 orbit frames + 4 plates, placed at
+train-split indices so all 4 train and eval stays orbit-only; paths relative, no image copies).
+Retrain: `ns-train splatfacto --data ../output/dataset/background ... --timestamp plates`.
+New run `background/splatfacto/plates` = 39.7 dB / 0.982 SSIM / 0.022 LPIPS on held-out orbit
+views (slightly below the orbit-only 40.7, since the corner views pull appearance off the
+orbit optimum) but visibly sharper at the corner cameras where the composite is actually
+rendered — the trade the merged result wants. Export: `background/export_plates/splat.ply`.
+Composite montage regenerated with this export (`make_qualitative.py --background-run
+splats/thesis/background/splatfacto/plates --background-ply .../export_plates/splat.ply`);
+merge gauge on this data = 4.4 deg rotation, x1.02 scale.
 
 Remaining known limitation: residual camouflage holes vs the rug in early frames (reduced by
 the tuned setting, not eliminated); strict snap test still flags ~half the cloud per frame on

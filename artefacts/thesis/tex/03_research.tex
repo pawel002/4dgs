@@ -29,7 +29,7 @@ rest of the chapter.
 
     \item \textbf{Separation of motion from appearance.} To a purely photometric
     loss, a surface that moves and a surface that changes colour are
-    indistinguishable: both change the pixels. An unconstrained optimizer will
+    indistinguishable, because both change the pixels. An unconstrained optimizer will
     therefore routinely take the cheaper of the two explanations, which is usually
     to \emph{repaint} a primitive that is already in roughly the right place rather
     than to \emph{move} the primitive that physically travelled. The result looks
@@ -62,7 +62,7 @@ remove this problem at its source.
 \subsection{High-Level Overview}
 \label{sec:overview}
 
-The proposed system rests on a single organizing idea: split the scene into a
+The proposed system rests on a single organizing idea, to split the scene into a
 static background and a dynamic foreground, and reconstruct each with the machinery
 best suited to it. A synthetic environment is rendered in Blender, which in the
 same pass exports mathematically exact camera poses and intrinsics, so the
@@ -125,7 +125,7 @@ implementation.
 Evaluating a novel-view-synthesis method requires ground-truth data precise enough
 that the residual error can be attributed to the reconstruction algorithm and not
 to the data. Real captures, however valuable for demonstrating robustness, always
-introduce noise: ambient-light flicker between frames, rolling-shutter skew on
+introduce noise, such as ambient-light flicker between frames, rolling-shutter skew on
 moving content, lens distortion, sensor noise, motion blur, and, most damaging for a
 tracking study, uncertainty in the recovered camera poses. Each of these adds error
 that is difficult to separate from the quantity actually under study. A fully
@@ -166,7 +166,7 @@ All imagery is produced with Blender's physically based path-tracing renderer,
 \emph{Cycles}, configured for GPU compute. The export script enables the available
 NVIDIA devices through the OptiX/CUDA back-ends and renders each configured camera
 over the full timeline, writing one image per frame. Path tracing rather than a
-rasterized preview is used deliberately: it produces physically correct soft
+rasterized preview is used deliberately, because it produces physically correct soft
 shadows, indirect illumination, and material response. The ground-truth images
 therefore contain the kind of view-dependent shading that the spherical-harmonic
 appearance model is meant to capture, rather than the flat shading a real-time
@@ -231,10 +231,24 @@ for the synchronous multi-view coverage that the dynamic problem does need.
     \caption{Top-down view of the dynamic-capture rig. Four fixed cameras
     (\texttt{static1} to \texttt{static4}) observe a moving subject from the room
     corners. The overlap of their view cones near the subject is the volume in which
-    all four silhouettes agree: the region the reconstruction can constrain from
+    all four silhouettes agree, the region the reconstruction can constrain from
     every side, and the basis of the visual-hull seed of Section~\ref{sec:hull}.}
     \label{fig:camera-rig}
 \end{figure}
+
+The two camera configurations are not as separate as they first appear, and one
+detail of the fixed rig feeds directly back into the background reconstruction. Each
+fixed camera reserves its first frame for a photograph of the empty room, the
+background plate that the foreground segmentation of Section~\ref{sec:bgsub}
+consumes. These four plates are genuine, calibrated views of exactly the scene the
+static reconstruction targets, the room without the subject, taken from the four
+corners, which are viewpoints the orbiting trajectory of
+Equation~\eqref{eq:traj} samples only sparsely. They are therefore added to the
+background training set alongside the orbit frames, so the static reconstruction is
+constrained not only along the orbit but also from the corner viewpoints from which
+the composited result is ultimately rendered. The addition costs nothing to capture,
+since the plates are already recorded for segmentation, and it improves the
+background precisely where the merged scene is viewed.
 
 The decisive methodological choice in the data pipeline is that camera poses are
 \textbf{exported directly from Blender rather than estimated from the rendered
@@ -463,7 +477,7 @@ $\tau_s$ can be raised if low-contrast leakage persists.
 The single threshold of Eq.~\eqref{eq:bgsub} has a failure mode that no value of
 $\tau_s$ can remove, because it is not a tuning problem but an information problem.
 Where the subject's colours locally resemble the background behind it, the subject
-\emph{camouflages}: the change magnitude $d$ over such regions is weak, and the
+\emph{camouflages}. The change magnitude $d$ over such regions is weak, and the
 silhouette develops holes (the mannequin's legs over the similarly coloured rug, in
 the early frames of the capture). The evidence in these regions is weak but it is
 \emph{not zero}, so the obvious repair is to lower the threshold, yet the same
@@ -475,7 +489,7 @@ separates weak \emph{object} evidence from weak \emph{illumination} evidence is 
 magnitude of the change but two properties the magnitude discards.
 
 The first property is the photometric signature. A cast shadow is a multiplicative
-change of illumination: it scales a pixel's intensity down while leaving its
+change of illumination. It scales a pixel's intensity down while leaving its
 \emph{chromaticity}, the direction of the colour vector, nearly unchanged. A genuinely
 different surface appearing at a pixel moves its chromaticity (or brightens it, which a
 shadow cannot). Writing $\ell(\mathbf{u}) = \bar I(\mathbf{u})$ for the luminance and
@@ -487,7 +501,7 @@ changed pixel is \emph{shadow-like} when
     \ell_t(\mathbf{u}) < \ell^{\mathrm{bg}}(\mathbf{u}),
     \label{eq:shadowlike}
 \end{equation}
-with $\tau_c$ a small chromaticity threshold: its colour direction stayed within
+with $\tau_c$ a small chromaticity threshold. In words, its colour direction stayed within
 $\tau_c$ of the plate's and it got darker. The second property is spatial structure. A
 camouflaged region is part of the subject, so it is \emph{attached} to confidently
 detected body regions; the shadow and bounce-light fringe lies on the floor and walls
@@ -506,7 +520,7 @@ while the weak band keeps only pixels that are not shadow-like,
     \label{eq:weakband}
 \end{equation}
 and the final silhouette is the \emph{geodesic reconstruction} of the strong seeds
-inside the weak support -- the connected components of
+inside the weak support, that is, the connected components of
 $\mathcal{S}^{\text{weak}}$ that contain at least one strong pixel. It is computed as
 the fixpoint of a masked dilation,
 \begin{equation}
@@ -526,7 +540,7 @@ fails it twice, first by the veto of Eq.~\eqref{eq:shadowlike} and second becaus
 with the veto applied, it is no longer connected to anything strong. The subsequent
 morphological cleanup and the rest of the pipeline are unchanged, so the mechanism is
 a drop-in replacement for the thresholding step, still with no learned model anywhere.
-Both parts are necessary: without the shadow veto the weak band floods through the
+Both parts are necessary. Without the shadow veto the weak band floods through the
 contact shadow under the feet and recruits the entire floor, and without the
 connectivity the isolated bounce-light islands survive; the ablation in
 Section~\ref{sec:results-bgsub} quantifies both. Defaults are
@@ -762,7 +776,7 @@ creates.
     \label{fig:visual-hull}
 \end{figure}
 
-\subsubsection{Frame 0: Dense Reconstruction}
+\subsubsection{Dense Reconstruction of Frame 0}
 \label{sec:frame0}
 
 The first frame is reconstructed by the full Gaussian-Splatting optimizer, with
@@ -806,7 +820,7 @@ fitting.
 
 \begin{itemize}
 
-    \item \textbf{Constant count (motivation: correspondence).} Densification and pruning are
+    \item \textbf{Constant count, motivated by correspondence.} Densification and pruning are
 disabled and the periodic opacity reset is skipped, so the primitive set is conserved
 exactly across the frame. The motivation is correspondence, only if the count is fixed
 and no primitive is created or destroyed does the index $i$ refer to the same physical
@@ -817,7 +831,7 @@ varying count would break all three. Skipping opacity reset matters for the same
 reason, the primitives are already well placed, and resetting their opacity would
 discard information and inject a transient artifact at every frame boundary.
 
-\item \textbf{Frozen colour (motivation: motion, not repainting).} The
+\item \textbf{Frozen colour, motivated by motion rather than repainting.} The
 spherical-harmonic coefficients, both the diffuse term $\mathrm{SH}^{(0)}$ and all
 higher bands $\mathrm{SH}^{(1..L)}$, are frozen after frame~$0$, their learning
 rates are set to zero and their gradient tracking is disabled. The trainable parameter
@@ -842,7 +856,7 @@ bit-identical while the means continue to move, confirming that no appearance ed
 is occurring. Opacity is deliberately left trainable, for reasons taken up in
 Section~\ref{sec:masking}.
 
-\item \textbf{Per-phase learning rate (motivation: sustained mobility).} The positional
+\item \textbf{Per-phase learning rate, motivated by sustained mobility.} The positional
 learning rate is scheduled differently in the two phases. During frame~$0$ it follows
 the usual exponential decay from $\eta_{\text{init}}$ to $\eta_{\text{final}}$, which
 is appropriate for converging a single static reconstruction. During tracking it is
@@ -926,17 +940,17 @@ and count are held constant while opacity is left free.
 
 The tracking constraints leave a gap between what is frozen and what is free. Colour
 and count are held exactly constant; positions must move, and their motion is genuine
-signal. In between sit the opacity, scale, and rotation of each primitive: they must
+signal. In between sit the opacity, scale, and rotation of each primitive. They must
 stay trainable (opacity for the reasons above, scale and rotation because the
 projected footprint of a body part changes as it articulates), yet for a rigid subject
 their \emph{true} evolution over a video frame is small. A generous tracking budget
 gives the optimizer thousands of steps per frame with nothing left to explain once the
 motion is absorbed, and the stochastic gradient spends them wandering these
-unconstrained attributes around their optimum. The result is \emph{jitter}: the
+unconstrained attributes around their optimum. The result is \emph{jitter}, where the
 converged value of, say, a scale coordinate fluctuates from frame to frame around a
 slowly varying trend. The fluctuation is invisible in any single frame, which is
 exactly why the per-frame photometric loss does not remove it, but it shows twice in
-the sequence: as temporal flicker in playback, and as high-frequency energy in the
+the sequence, as temporal flicker in playback and as high-frequency energy in the
 attribute time series, which is precisely what the compressor of
 Section~\ref{sec:compression} cannot truncate (its noisy channels saturate the
 coefficient cap in Section~\ref{sec:results-compression}).
@@ -956,11 +970,11 @@ the previous frame and the sum runs over the opacity logits, log-scales, and
 quaternions (Figure~\ref{fig:smoothness-tikz}). Positions are deliberately exempt:
 their inter-frame change is the motion itself, already warm-started by the velocity
 prediction, and anchoring them would bias the tracker against genuine displacement.
-The term is quadratic, so it acts as a soft spring, not a freeze: a genuine change in
+The term is quadratic, so it acts as a soft spring, not a freeze. A genuine change in
 an attribute is paid for once and the anchor follows it on the next frame, while
 zero-mean fluctuation is damped towards the previous value. In effect the optimizer
 sees the same objective as before plus a statement of the constant-topology
-philosophy in loss form -- \emph{explain the new frame by moving, not by twitching}.
+philosophy in loss form, \emph{explain the new frame by moving, not by twitching}.
 The weight $\lambda_{\text{s}}$ is selected by a pilot sweep in
 Section~\ref{sec:results-smoothness}.
 
@@ -969,7 +983,7 @@ Section~\ref{sec:results-smoothness}.
     \resizebox{0.9\textwidth}{!}{\input{res/03_research/tikz/smoothness_prior}}
     \caption{The temporal smoothness prior. (a)~With the non-positional attributes
     unconstrained, their converged per-frame values fluctuate around the true slow
-    evolution -- optimizer noise that flickers in playback and defeats truncation in
+    evolution, optimizer noise that flickers in playback and defeats truncation in
     the temporal-frequency basis. (b)~An L2 anchor to the previous frame's converged
     value damps the fluctuation at the source while letting genuine slow changes
     through.}
@@ -1097,7 +1111,7 @@ cloud which lagged or overshot is snapped forward onto the current silhouette. E
 frame therefore begins with all primitives inside the object as seen from every camera.
 This is a configuration from which the subsequent tracking steps can only improve, since
 they start already consistent with all four silhouettes. This is the sense in which
-the method ''clamps the point cloud to the camera frustums'': the silhouette
+the method ''clamps the point cloud to the camera frustums''. The silhouette
 intersection is the set of points consistent with every camera's frustum-bounded view
 of the object, and snapping enforces membership in it. A milder alternative, used only
 when snapping is disabled, simply zeroes a stray's velocity so it stops coasting. This
@@ -1110,7 +1124,7 @@ inferior (Section~\ref{sec:results-snap}).
 The stray test of Eq.~\eqref{eq:snap} is binary in exactly the way the silhouettes are
 not reliable. A primitive whose projection falls one pixel outside a noisy mask
 boundary, or into a residual silhouette hole, fails the test just as decisively as a
-primitive that has coasted ten subject radii into empty space -- yet the correct
+primitive that has coasted ten subject radii into empty space, yet the correct
 response differs completely. The first primitive is almost certainly \emph{on} the
 object; teleporting it to the nearest hull-surface voxel destroys locally converged
 geometry that the next tracking block must then rebuild. The second is a genuine
@@ -1131,15 +1145,15 @@ the carved hull decides whether it is actually touched,
 \end{equation}
 where $v$ is the hull's voxel size and $\delta$ the margin in voxels (default
 $\delta = 2$). Geometrically, the hull acquires a shell of thickness $\delta v$
-(Figure~\ref{fig:snap-margin-tikz}): primitives inside the shell are \emph{borderline}
--- they disagree with some silhouette by no more than the silhouettes' own noise, and
+(Figure~\ref{fig:snap-margin-tikz}). Primitives inside the shell are \emph{borderline}.
+They disagree with some silhouette by no more than the silhouettes' own noise, and
 are left to the photometric optimizer, which has the gradient information the binary
 test lacks. Primitives beyond the shell are unambiguous strays and are snapped exactly
 as before. The margin costs nothing extra to evaluate, because the nearest-voxel
 distance is already computed to find the snap target. This turns the frustum clamp
 from a blunt re-registration, which teleports roughly half the cloud each frame, into
 a targeted safety net that fires only on true runaways, while retaining the guarantee
-that no primitive can coast away: any primitive farther than $\delta v$ from the
+that no primitive can coast away, since any primitive farther than $\delta v$ from the
 volume all cameras agree on is still reclaimed on the next frame boundary.
 
 \begin{figure}[!ht]
@@ -1367,7 +1381,7 @@ that no amount of optimization can remove. This
 \emph{input reference} is plotted alongside the reconstruction in
 Figure~\ref{fig:full-sequence} and should be read as the level a perfect reproduction
 of the training data would reach. Two consequences follow. First, absolute
-object-PSNR values in the range $16$--$20$\,dB indicate a reconstruction at or above
+object-PSNR values in the range $16$ to $20$\,dB indicate a reconstruction at or above
 the fidelity of its own inputs, not a poor one. Second, since every method variant is
 bounded by the same offset, object PSNR compresses into a narrow band and loses most
 of its discriminating power, the structural metrics, coverage, leak, extent and object
@@ -1376,7 +1390,7 @@ SSIM, carry the actual signal, and the discussion below leans on them.
 Each mechanism is evaluated by disabling (or replacing) it while keeping every other
 setting at its default, then re-running the entire $150$-frame reconstruction
 and re-measuring all metrics per frame. The default configuration
-is: background subtraction at $\tau_s = 0.06$ with a morphological opening, a
+is as follows. It uses background subtraction at $\tau_s = 0.06$ with a morphological opening, a
 $2$-pixel dilation and two final $3\times3$ erosion steps (the setting selected by the
 sweep of Section~\ref{sec:results-bgsub}), visual-hull seeding, a frame-0 budget of
 $N_0 = 10\,000$ steps, a tracking budget of $N_t = 3000$ steps per frame, velocity
@@ -1392,7 +1406,7 @@ colours during tracking.
         \includegraphics[width=0.95\linewidth]{res/03_research/results/bgsub_montage.png}
     \end{center}
     \caption{Model-free segmentation on one view (camera \texttt{static2}, frame 75).
-    From left: the input frame, the empty-room plate, their per-pixel change magnitude
+    From left, the input frame, the empty-room plate, their per-pixel change magnitude
     $d_{c,t}$, extracted silhouette(mask), segmented image and a ground truth (with a light error).}
     \label{fig:bgsub-montage}
 \end{figure}
@@ -1402,7 +1416,7 @@ camera and frame, by comparing its silhouettes and segmented images against the
 ground-truth renders. To achieve this, Intersection-over-union (IoU), precision, and recall of the mask
 against the true silhouette, and the PSNR of the segmented image are calculated against the
 ground-truth image. Figure~\ref{fig:bgsub-montage} shows the chain on one
-representative view: the per-pixel change magnitude cleanly isolates the subject, the
+representative view. The per-pixel change magnitude cleanly isolates the subject, the
 morphological cleanup removes the speckle, and the final segmented frame is visually
 indistinguishable from the ground-truth render apart from a faint remnant of the
 contact shadow under the feet, which the multi-view hull intersection later removes
@@ -1414,7 +1428,7 @@ from the geometry.
     \caption{Segmentation accuracy against the ground-truth silhouettes.
     (a)~Threshold sweep. precision falls at low $\tau_s$ (shadow and indirect-light
     leak), recall falls at high $\tau_s$ (low-contrast subject regions).
-    (b)~Erosion sweep at the chosen threshold: each final $3\times3$ erosion step
+    (b)~Erosion sweep at the chosen threshold, where each final $3\times3$ erosion step
     raises precision monotonically, the direct cure for an oversized mask, at a
     growing cost in recall; two steps are adopted as the default.
     (c)~Per-frame IoU of each camera at the chosen setting.}
@@ -1430,15 +1444,15 @@ onto nearby surfaces register as change, while at high thresholds recall collaps
 $0.24$ at $\tau_s = 0.3$) because image regions where the subject resembles the
 surface behind it fall under the threshold. The first version of the pipeline ran at
 $\tau_s = 0.1$ with no final erosion, which this sweep reveals to be doubly
-sub-optimal: the mask it produces is simultaneously too \emph{large} at the boundary,
+sub-optimal, because the mask it produces is simultaneously too \emph{large} at the boundary,
 where the $2$-pixel dilation that protects soft edges also admits a fringe of
 background pixels, and too \emph{small} in the interior, where low-contrast subject
-regions drop out. The oversized boundary is addressed by a new, final erosion stage: after the opening
+regions drop out. The oversized boundary is addressed by a new, final erosion stage. After the opening
 and the dilation, the mask is eroded by a configurable number of $3\times3$ steps,
 so that the dilation-plus-erosion pair acts as a morphological closing (sealing small
 interior holes) followed by a net contraction of the boundary fringe. The erosion
 sweep (Figure~\ref{fig:bgsub-quality}b), run at the jointly-optimal threshold
-$\tau_s = 0.06$, shows the effect directly: each added erosion step raises precision
+$\tau_s = 0.06$, shows the effect directly. Each added erosion step raises precision
 monotonically ($0.872 \to 0.915 \to 0.936 \to 0.944$ for zero to three steps),
 confirming that the excess mask area is a boundary fringe that erosion removes, while
 recall falls as erosion begins to eat genuinely low-contrast subject regions. A joint
@@ -1446,7 +1460,7 @@ grid over $(\tau_s, \text{erosion})$ locates the global IoU optimum at
 $\tau_s = 0.06$ with one erosion step (IoU $0.884$). The configuration adopted as the
 default, $\tau_s = 0.06$ with \emph{two} erosion steps, gives up $0.02$ of that IoU to
 push precision to $0.936$, and strictly dominates the original setting on every
-metric: over all $150$ frames and four cameras, IoU $0.863$ against $0.824$, precision
+metric. Over all $150$ frames and four cameras, it reaches IoU $0.863$ against $0.824$, precision
 $0.936$ against $0.933$, recall $0.918$ against $0.878$, and segmented-image PSNR
 $30.6$ against $29.8$\,dB.
 
@@ -1477,7 +1491,7 @@ into the frame-0 seed, and the reconstruction inherits a fragmented lower body
 at the source, its lower threshold re-admits the low-contrast areas while the added
 erosion keeps the boundary tight, and the reconstruction correspondingly starts from
 a far more complete seed (Figure~\ref{fig:bgsub-fix}, right). The experiment illustrates the practical value of
-measuring the segmentation in isolation: the mask sweep predicted the better
+measuring the segmentation in isolation. The mask sweep predicted the better
 operating point, and the end-to-end rerun confirmed it.
 
 \subsubsection{Shadow-Aware Hysteresis}
@@ -1490,7 +1504,7 @@ attribute the gain to its parts. Replacing the mean channel difference by the
 \emph{maximum} channel difference already helps (IoU $0.844 \to 0.906$ on the sweep
 frames), confirming that part of the camouflage evidence is single-channel change that
 the mean dilutes. The naive hysteresis, a low-threshold band admitted purely by
-connectivity, is instructive in the opposite direction: it \emph{collapses}, to a
+connectivity, is instructive in the opposite direction. It \emph{collapses}, to a
 precision of $0.37$, because the weak band is connected to the subject through the
 contact shadow under the feet, and the reconstruction floods the floor. The shadow veto
 of Eq.~\eqref{eq:shadowlike} is what makes the weak band usable: alone (all shadow-free
@@ -1500,15 +1514,15 @@ rises from $0.968$ to $0.990$. The full mechanism, measured over all $150$ frame
 four cameras, reaches \textbf{IoU $0.962$, precision $0.986$, recall $0.975$}, against
 $0.863 / 0.935 / 0.918$ for the production threshold, and lifts the segmented-image
 PSNR from $30.6$ to $33.8$\,dB. Two properties matter beyond the means. The
-\emph{worst} frame improves from IoU $0.77$ to $0.91$ -- the camouflage window of
+\emph{worst} frame improves from IoU $0.77$ to $0.91$ (the camouflage window of
 Figure~\ref{fig:seg-variants}b is essentially healed, with the early-frame IoU flat
-where the single threshold dips -- and the result is insensitive to the high threshold
+where the single threshold dips), and the result is insensitive to the high threshold
 (identical IoU across $\tau_{\text{hi}} \in [0.08, 0.12]$), because the strong band
 only seeds regions whose extent the weak band then delineates. The pipeline's most
 delicate knob, the single $\tau_s$ that the joint sweep of
 Figure~\ref{fig:bgsub-quality} had to balance between shadow leak and camouflage, is
 replaced by two thresholds that are each uncritical. Figure~\ref{fig:seg-montage}
-shows the repair qualitatively on the worst camouflage frame: the change-magnitude
+shows the repair qualitatively on the worst camouflage frame. The change-magnitude
 panel makes the failure visible (the lower body's evidence is faint but present and
 attached to the bright torso), the single threshold fragments the legs, and the
 hysteresis silhouette is visually indistinguishable from the ground truth.
@@ -1518,11 +1532,11 @@ hysteresis silhouette is visually indistinguishable from the ground truth.
     \includegraphics[width=\textwidth]{res/03_research/results/seg_variants.png}
     \caption{Segmentation variants against the ground-truth silhouettes.
     (a)~Mask quality of the production single threshold, the max-channel difference,
-    and the hysteresis mechanism with its two ablations: without the shadow veto the
+    and the hysteresis mechanism with its two ablations. Without the shadow veto the
     weak band floods through the contact shadow (precision $0.37$); without
     connectivity the veto alone leaves isolated bounce-light islands. (b)~Per-frame
-    IoU: the single threshold dips wherever the subject camouflages (shaded window:
-    the rug), the shadow-aware hysteresis stays at ${\sim}0.96$ throughout.}
+    IoU, where the single threshold dips wherever the subject camouflages (the shaded
+    window is the rug), while the shadow-aware hysteresis stays at ${\sim}0.96$ throughout.}
     \label{fig:seg-variants}
 \end{figure}
 
@@ -1574,8 +1588,8 @@ and with its thirty-fold head start in capacity it ends the $10\,000$-step fit
 slightly above the hull run, at $45.1$\,dB. It pays for those extra $3.4$\,dB with
 $66\,728$ surviving primitives, three and a half times the hull-seeded count for the
 same subject, an overhead that every subsequent tracking step, checkpoint, and
-compressed frame would inherit for the rest of the capture -- and, unlike the hull
-seed, it offers no defence at smaller budgets, where the random start collapses
+compressed frame would inherit for the rest of the capture. Unlike the hull
+seed, it also offers no defence at smaller budgets, where the random start collapses
 outright. The hull seed is thus the
 enabler of the small, trackable primitive budget the temporal method depends on.
 Under the masked-loss regime an equal-budget random start is not a worse
@@ -1589,10 +1603,10 @@ costs multiples in primitives.
     \centering
     \includegraphics[width=\textwidth]{res/03_research/results/velocity_convergence.png}
     \caption{Effect of the velocity warm start, measured per frame on a 40-frame
-    tracking sequence from an identical frame-0 state (improved pipeline: hysteresis
+    tracking sequence from an identical frame-0 state (improved pipeline, with hysteresis
     silhouettes and margin clamping active in both arms). (a)~Steps needed to reach a
-    fixed $20$\,dB object-PSNR target: means of $23$ vs.\ $145$ steps ($84\%$ fewer).
-    (b)~Quality reached at a PSNR plateau: the warm-started fit converges about
+    fixed $20$\,dB object-PSNR target, with means of $23$ vs.\ $145$ steps ($84\%$ fewer).
+    (b)~Quality reached at a PSNR plateau, where the warm-started fit converges about
     $5.9$\,dB higher, because a cold start must re-traverse the full inter-frame
     motion each frame and tends to stall early.}
     \label{fig:velocity-conv}
@@ -1617,10 +1631,10 @@ An honest caveat emerges at a generous budget. With
 $N_t = 3000$ steps per frame, re-running the full
 150-frame reconstruction \emph{without} velocity prediction yields statistically
 indistinguishable end quality ($18.32$ vs.\ $18.23$\,dB object PSNR, $0.847$ vs.\
-$0.851$ SSIM): three thousand steps are simply enough for a cold start to re-traverse
+$0.851$ SSIM), because three thousand steps are simply enough for a cold start to re-traverse
 one inter-frame displacement. At such an operating point the value of the prediction
-is therefore efficiency rather than final quality -- a warm-started frame reaches
-target quality in roughly a sixth of the steps -- which is precisely what permits
+is therefore efficiency rather than final quality. A warm-started frame reaches
+target quality in roughly a sixth of the steps, which is precisely what permits
 cutting the tracking budget, and the reconstruction time with it, several-fold. The
 budget study of Section~\ref{sec:results-budget} cashes this in: at the adopted
 $N_t = 300$ the cold start no longer has time to re-traverse the motion, the plateau
@@ -1654,10 +1668,10 @@ tensor addition per frame.
     \centering
     \includegraphics[width=\textwidth]{res/03_research/results/snapping_curves.png}
     \caption{Per-frame behaviour of the three clamping variants over 150 frames.
-    (a)~Object SSIM: snapping holds the highest structural quality throughout.
-    (b)~Cloud extent: without any mechanism the furthest primitive coasts away
+    (a)~Object SSIM, where snapping holds the highest structural quality throughout.
+    (b)~Cloud extent, where without any mechanism the furthest primitive coasts away
     linearly, the runaway signature; both mechanisms bound it. (c)~Background leak
-    (log scale): gating is worst, its parked strays accumulating as a haze near the
+    (log scale), where gating is worst, its parked strays accumulating as a haze near the
     subject, while snapping reclaims them.}
     \label{fig:snap-curves}
 \end{figure}
@@ -1671,8 +1685,8 @@ The per-frame hull snapping is compared over the full 150-frame sequence against
 \label{sec:results-snapmargin}
 
 The margin of Eq.~\eqref{eq:snapmargin} ($\delta = 2$ voxels) and the hysteresis
-segmentation attack the same over-triggering from two sides -- one filters the
-\emph{response} to a noisy stray test, the other cleans the \emph{input} to it -- and
+segmentation attack the same over-triggering from two sides (one filters the
+\emph{response} to a noisy stray test, the other cleans the \emph{input} to it), and
 measuring them separately and together reveals that they are complementary rather than
 interchangeable (Figure~\ref{fig:snap-margin-results}). With the margin alone, on the
 production single-threshold masks, the strict test still nominates about $75\%$ of the
@@ -1682,11 +1696,11 @@ reading is that on noisy silhouettes the blunt full re-registration was load-bea
 teleporting half the cloud onto the hull every frame compensated for the very mask
 errors that caused the flags, and softening the response without fixing the cause
 removes that compensation. With the hysteresis masks alone the opposite limitation
-appears: the flags genuinely fall, but the strict test still nominates roughly $60\%$
-of the (now larger) cloud in a sawtooth pattern -- snapping resets the snapped
+appears. The flags genuinely fall, but the strict test still nominates roughly $60\%$
+of the (now larger) cloud in a sawtooth pattern. Snapping resets the snapped
 primitives' velocity history, the cloud lags the subject on the next frame, and the
 test flags it again, a feedback loop the binary test cannot escape. Only the
-combination breaks the loop: clean silhouettes cut the nominations to ${\sim}2800$
+combination breaks the loop. Clean silhouettes cut the nominations to ${\sim}2800$
 per frame (a fifth of the cloud), the margin then dismisses the borderline majority of
 those, and the teleports that actually fire drop to ${\sim}900$ per frame, an order of
 magnitude below the no-margin arm (Figure~\ref{fig:snap-margin-results}b). The
@@ -1700,10 +1714,10 @@ is only safe to do so once the stray test is fed silhouettes it can trust.
     \centering
     \includegraphics[width=\textwidth]{res/03_research/results/snap_margin.png}
     \caption{The distance-field margin and the segmentation quality interact.
-    (a)~Primitives flagged by the strict projective test per frame: with noisy masks
+    (a)~Primitives flagged by the strict projective test per frame. With noisy masks
     (margin only) the test nominates ${\sim}75\%$ of the cloud; hysteresis masks
-    without the margin still oscillate in a snap--lag--snap feedback; the combination
-    settles near a fifth of the cloud. (b)~Teleports actually applied (log scale): the
+    without the margin still oscillate in a snap-lag-snap feedback; the combination
+    settles near a fifth of the cloud. (b)~Teleports actually applied (log scale), where the
     margin dismisses the borderline majority, leaving an order of magnitude fewer
     interventions.}
     \label{fig:snap-margin-results}
@@ -1741,7 +1755,7 @@ own.
 \begin{figure}[!t]
     \centering
     \includegraphics[width=\textwidth]{res/03_research/results/masking_curves.png}
-    \caption{Background drift over 150 frames. (a)~Leaked opacity (log scale): under
+    \caption{Background drift over 150 frames. (a)~Leaked opacity (log scale), where under
     the naive loss the background fills monotonically to near-total opacity; frozen
     opacity strands strays an order of magnitude above the default, whose leak stays
     flat at the $10^{-3}$ level. (b)~Core coverage is blind to the failure, the
@@ -1751,7 +1765,7 @@ own.
 
 Under the naive full-image loss the drift is no longer a leak but a flood. The mean
 rendered opacity outside the object grows monotonically from $0.016$ at the first
-tracking frame to $0.99$ at the last: by the end of the sequence the model has
+tracking frame to $0.99$ at the last. By the end of the sequence the model has
 painted the \emph{entire} background as an opaque black surface. The mechanism is
 exactly the one identified in Section~\ref{sec:masking}, matching black-on-black
 costs nothing, so every primitive that strays is repurposed into background fill,
@@ -1760,17 +1774,17 @@ PSNR decays to $10.5$\,dB by the last frame as the subject is cannibalized. That
 core coverage of this arm reads $0.997$ only underlines that coverage measures
 solidity, not correctness, a model that paints everything opaque covers the core
 trivially. Freezing opacity while keeping the silhouette loss fails more subtly, as
-predicted: a primitive pushed off the subject has no photometric pull-back (the loss
+predicted. A primitive pushed off the subject has no photometric pull-back (the loss
 is masked away there) \emph{and} no ability to fade, so it remains stuck bright and
 opaque off-object. Its leak stabilizes around $10^{-2}$, an order of magnitude above
 the default, and its object SSIM, $0.606$, is the worst of any arm measured in this
 chapter. The default keeps the leak at the $10^{-3}$ level with no upward trend
 across all $150$ frames, i.e.\ the drift does not accumulate at all, and holds the
-highest structural quality. One nuance completes the picture: with hull snapping
+highest structural quality. One nuance completes the picture. With hull snapping
 active, freezing opacity becomes nearly harmless, because snapping reclaims the stuck
 primitives before they matter. The two mechanisms are thus partially redundant by
 design, and the measurements identify trainable opacity as the one that must not be
-given up: it is the only escape valve that works in every regime.
+given up, since it is the only escape valve that works in every regime.
 
 \subsection{Frozen Colour}
 \label{sec:results-colour}
@@ -1782,16 +1796,16 @@ colours during tracking lets the mean absolute deviation of the diffuse SH coeff
 from their frame-0 values climb steadily to $1.75$ by the last frame, the optimizer
 continuously repaints the subject to absorb whatever the geometry has not yet
 explained, exactly the appearance-motion entanglement of problem~2 in the Problem
-Statement. What does all that repainting buy? Nothing measurable: mean object PSNR is
+Statement. What does all that repainting buy? Nothing measurable. Mean object PSNR is
 $18.19$\,dB with colours free against $18.23$\,dB with them frozen, and the SSIM
 difference ($0.856$ vs.\ $0.851$) is within the run-to-run spread. On a scene whose
 materials genuinely do not change, the appearance freedom is pure slack, consumed by
 the optimizer without photometric return, while silently destroying the guarantees
-the rest of the system builds on: with colours free, primitive $i$'s appearance at
+the rest of the system builds on. With colours free, primitive $i$'s appearance at
 frame $t$ no longer identifies it with its frame-0 self, trajectories stop being
 trajectories of a fixed physical feature, and the constant-mode compression of every
 colour channel (Section~\ref{sec:results-compression}) becomes impossible. Freezing
-colour is therefore as close to a free constraint as the pipeline has: zero measured
+colour is therefore as close to a free constraint as the pipeline has, with zero measured
 photometric cost, and it converts an assumption the compressor and the correspondence
 analysis need into a certainty.
 
@@ -1800,7 +1814,7 @@ analysis need into a certainty.
     \includegraphics[width=\textwidth]{res/03_research/results/freecolors_curves.png}
     \caption{Colour freezing over 150 frames. (a)~With colours trainable, appearance
     drifts monotonically away from frame~0; frozen colours are bit-identical by
-    construction. (b)~The drift buys no quality: the per-frame object PSNR of the two
+    construction. (b)~The drift buys no quality, since the per-frame object PSNR of the two
     arms is statistically indistinguishable.}
     \label{fig:freecolors}
 \end{figure}
@@ -1812,9 +1826,9 @@ The prior of Section~\ref{sec:smoothness} has one knob, and the pilot sweep that
 also demarcates what the mechanism can and cannot buy
 (Figure~\ref{fig:smoothness-results}b). Over
 $\lambda_{\text{s}} \in \{0.3, 1, 3\}$ on a 40-frame pilot, the jitter suppression is
-essentially binary -- even the smallest weight collapses the opacity fluctuation by
-nearly three orders of magnitude -- while the structural cost grows steadily with the
-weight (object SSIM $0.827 \to 0.814 \to 0.799 \to 0.789$): past the point where the
+essentially binary (even the smallest weight collapses the opacity fluctuation by
+nearly three orders of magnitude), while the structural cost grows steadily with the
+weight (object SSIM $0.827 \to 0.814 \to 0.799 \to 0.789$). Past the point where the
 noise is gone, a stronger anchor only fights genuine attribute changes. The smallest
 tested weight, $\lambda_{\text{s}} = 0.3$, is therefore the operating point, taking
 nearly all of the compression benefit at the smallest quality cost.
@@ -1823,30 +1837,30 @@ At that setting, on the full 150-frame reconstruction, the frame-to-frame fluctu
 of the anchored attributes collapses exactly as designed
 (Figure~\ref{fig:smoothness-results}a): opacity by a factor of ${\sim}180$
 ($0.224 \to 0.0012$ logits per frame), scale by ${\sim}78$, rotation by ${\sim}5$,
-while the \emph{position} jitter -- deliberately exempt -- is unchanged, confirming the
+while the \emph{position} jitter, deliberately exempt, is unchanged, confirming the
 prior damps the noise without damping the motion. The downstream effect lands where
 Section~\ref{sec:results-compression} located the bottleneck: the opacity and scale
 channels, which under free tracking saturate the 64-coefficient cap, now compress to
-one or two DCT coefficients each, and the whole-sequence rate--distortion front shifts
+one or two DCT coefficients each, and the whole-sequence rate-distortion front shifts
 outward (Figure~\ref{fig:smoothness-results}c). At the default quality knob the
 sequence compresses $43.5\times$ against the baseline's $27.8\times$, at slightly
 \emph{higher} render fidelity ($27.0$ vs.\ $26.2$\,dB). The quaternions still saturate
 the cap, so rotation remains the residual cost. The price on this
 run in isolation is a structural dip (object SSIM $0.833$ vs.\ $0.854$; object PSNR
 within the non-discriminating band), which the combined configuration of
-Section~\ref{sec:results-improved} absorbs entirely -- with the cleaner silhouettes in
-place the anchored attributes no longer need the extra slack, and the full system
+Section~\ref{sec:results-improved} absorbs entirely. With the cleaner silhouettes in
+place, the anchored attributes no longer need the extra slack, and the full system
 reaches the best SSIM measured in this chapter with the prior active.
 
 \begin{figure}[!ht]
     \centering
     \includegraphics[width=\textwidth]{res/03_research/results/smoothness.png}
     \caption{The temporal smoothness prior. (a)~Frame-to-frame attribute fluctuation
-    on the full sequence: the anchored channels drop by up to two orders of magnitude,
-    the exempt positions are untouched. (b)~The pilot sweep: jitter suppression is
+    on the full sequence, where the anchored channels drop by up to two orders of magnitude,
+    the exempt positions are untouched. (b)~The pilot sweep, where jitter suppression is
     already saturated at $\lambda_{\text{s}} = 0.3$ while the SSIM cost keeps growing,
-    so the smallest weight is chosen. (c)~The compression rate--distortion front of
-    the full run shifts outward: $43.5\times$ at the default knob vs.\ $27.8\times$
+    so the smallest weight is chosen. (c)~The compression rate-distortion front of
+    the full run shifts outward, reaching $43.5\times$ at the default knob vs.\ $27.8\times$
     for the baseline, at matched-or-better render fidelity.}
     \label{fig:smoothness-results}
 \end{figure}
@@ -1864,11 +1878,11 @@ subject stands in the room's well-lit interior and lowest where it hugs the dark
 corners, a property of the illumination gap rather than of the tracking. The
 reconstruction in fact scores \emph{above} the segmented inputs on $149$ of $150$
 frames, by $0.74$\,dB on average. A reconstruction beating a pixel-perfect copy of its
-own training data sounds paradoxical but is informative: fusing four views into one
+own training data sounds paradoxical but is informative. Fusing four views into one
 consistent 3D cloud averages away the per-view segmentation artifacts, the shadow
 fringes and residual silhouette holes that afflict individual masks, so the
 multi-view model is closer to the true subject than any single segmented input is.
-Structure is likewise stable end to end: object SSIM stays in a band around $0.85$
+Structure is likewise stable end to end, with object SSIM staying in a band around $0.85$
 and core coverage around $0.98$ for the whole capture, with no downward trend over
 150 frames (Figure~\ref{fig:full-sequence}b), which is the temporal-coherence claim
 of the Problem Statement in measured form. Qualitatively
@@ -1882,7 +1896,7 @@ moves onto the neutral floor.
     \centering
     \includegraphics[width=\textwidth]{res/03_research/results/full_sequence.png}
     \caption{The full-resolution 150-frame reconstruction. (a)~Per-frame object PSNR
-    against the ground truth, with the segmented-input reference (dashed): the
+    against the ground truth, with the segmented-input reference (dashed), where the
     reconstruction rides above the fidelity of its own inputs on $149$ of $150$
     frames, and the common shape of both curves is the illumination gap, not tracking
     error. (b)~Object SSIM and core coverage are flat across the capture; nothing
@@ -1925,7 +1939,7 @@ and it exists here as a direct consequence of the constant-topology principle.
     \caption{The reconstruction as a field of trajectories. (a)~Paths of 400 randomly
     sampled primitives through the capture (colour = time); the body's vertical
     structure is preserved along the walk, so a primitive keeps denoting the same
-    physical feature. (b)~Cumulative displacement across all $11\,561$ primitives: a
+    physical feature. (b)~Cumulative displacement across all $11\,561$ primitives, forming a
     tight, unimodal distribution, the signature of a cloud that moves as one coherent
     body.}
     \label{fig:trajectories}
@@ -1935,24 +1949,30 @@ and it exists here as a direct consequence of the constant-topology principle.
 
 Figure~\ref{fig:qual-merge} shows the other half of the static-dynamic decomposition
 put back together. The static room, reconstructed once by the stock \textsc{splatfacto}
-baseline from the 240-pose orbit of Section~\ref{sec:data}, reaches $40.7$\,dB PSNR
-($0.989$ SSIM, $0.014$ LPIPS) on held-out views, confirming that the static problem is
-essentially solved and justifying its role as a fixed backdrop. The merge renderer
+baseline from the 240-pose orbit of Section~\ref{sec:data} augmented with the four
+empty-room plates of the fixed rig, reaches $39.7$\,dB PSNR ($0.982$ SSIM, $0.022$
+LPIPS) on held-out orbit views, confirming that the static problem is essentially
+solved and justifying its role as a fixed backdrop. Adding the plates trades a small
+amount of held-out orbit fidelity, since the corner views pull appearance slightly
+away from the orbit-only optimum, for genuine geometric constraints at the corner
+viewpoints from which the composite is actually rendered, which is the trade the
+merged result benefits from. The merge renderer
 re-expresses the two independently normalized reconstructions in a common frame (the
-two dataparser gauges differ by a $4.5^{\circ}$ rotation and a $0.80$ scale factor on
+two dataparser gauges differ by a $4.4^{\circ}$ rotation and a $1.02$ scale factor on
 this data, reconciled once at load time) and composites the per-frame foreground over
-the background node. The composite is rendered from one of the corner cameras, a pose
-the background reconstruction never observed, which accounts for its slight softness;
-the subject composites into the correct location on the rug throughout the capture,
-and frame switching is a visibility toggle, so playback cost is independent of
-sequence length as designed in Section~\ref{sec:merge}.
+the background node. The composite is rendered from one of the corner cameras, which
+the background reconstruction now observes through its plate, so the backdrop is
+sharper there than in the earlier orbit-only version. The subject composites into the
+correct location on the rug throughout the capture, and frame switching is a
+visibility toggle, so playback cost is independent of sequence length as designed in
+Section~\ref{sec:merge}.
 
 \begin{figure}[!ht]
     \begin{center}
         \includegraphics[width=1.0\linewidth]{res/03_research/results/composite_montage.png}
     \end{center}
-    \caption{The recombined scene. Top: the raw capture from camera \texttt{static2}
-    (never segmented, shown for reference). Bottom: the merge renderer's composite of
+    \caption{The recombined scene. Top, the raw capture from camera \texttt{static2}
+    (never segmented, shown for reference). Bottom, the merge renderer's composite of
     the static background reconstruction (a novel view for it) with the per-frame
     dynamic foreground at three instants.}
     \label{fig:qual-merge}
@@ -1974,7 +1994,7 @@ own budget, the convergence measurements of Section~\ref{sec:results-velocity} s
 the warm-started tracker reaches target quality in a small fraction of the allotted
 steps, so the $3000$-step budget is deliberately generous headroom rather than a
 requirement, and throughput-oriented deployments could cut it several-fold. Storage
-scales with the fixed cloud: each frame is a constant $11\,561$-primitive file of
+scales with the fixed cloud, since each frame is a constant $11\,561$-primitive file of
 $2.9$\,MB, $430$\,MB for the full capture, which the next section compresses by more
 than an order of magnitude.
 
@@ -2021,9 +2041,9 @@ out of $150$, because the trajectories of Figure~\ref{fig:trajectories} are smoo
 and low-frequency, while the opacity, scale, and rotation channels all saturate the
 $64$-coefficient cap (Figure~\ref{fig:rate-distortion}b). This last observation also
 explains why the ratio at matched quality is somewhat lower than on a
-short-budget run: the generous $3000$-step tracking budget lets the non-positional
+short-budget run, because the generous $3000$-step tracking budget lets the non-positional
 attributes fluctuate from frame to frame, producing noisier time series that resist
-truncation. The compression column is thus a mirror of the method itself: what the
+truncation. The compression column is thus a mirror of the method itself. What the
 tracking regime holds constant costs nothing, what it moves smoothly costs little,
 and what it leaves free to fluctuate is expensive.
 
@@ -2032,7 +2052,7 @@ and what it leaves free to fluctuate is expensive.
     \includegraphics[width=\textwidth]{res/03_research/results/compression.png}
     \caption{Temporal compression of the full sequence. (a)~Rate-distortion front
     swept by the single quality knob $q$; the default operating point is marked.
-    (b)~Retained DCT coefficients per time-varying attribute at the default $q$: the
+    (b)~Retained DCT coefficients per time-varying attribute at the default $q$, where the
     smooth positions need a small fraction of the 150 coefficients, while the noisy
     opacity, scale, and rotation channels hit the cap. All colour attributes are
     stored losslessly by the constant mode and the normals by the zero mode, so
@@ -2067,7 +2087,7 @@ the v2 baseline, and the full combination, all trained under the identical
     \caption{The improvement mechanisms, alone and combined, over the full 150-frame
     sequence (means over frames; extent at the last frame). PSNR stays inside the
     illumination-gap band throughout and does not discriminate. Note the
-    interactions: the snap margin \emph{alone} hurts (its gentleness exposes the mask
+    interactions. The snap margin \emph{alone} hurts (its gentleness exposes the mask
     noise the blunt clamp was compensating for), and the smoothness prior alone costs
     structure, yet the combination is the best configuration measured. The primitive
     count is set by frame-0 densification and varies with the mask fullness and run
@@ -2076,27 +2096,27 @@ the v2 baseline, and the full combination, all trained under the identical
 \end{table}
 
 Three observations organize the table. First, the segmentation improvement is the
-dominant single factor: alone it lifts object SSIM to $0.878$ and cuts the background
+dominant single factor. Alone it lifts object SSIM to $0.878$ and cuts the background
 leak by a factor of fifty (the leak of the whole system is segmentation-limited,
 because mask holes both misdirect the silhouette loss and mis-trigger the clamp).
-It also doubles the primitive count -- the fuller silhouettes leave densification
-free to cover the whole subject -- which enlarges every downstream file, and its
+It also doubles the primitive count (the fuller silhouettes leave densification
+free to cover the whole subject), which enlarges every downstream file, and its
 strict-test interaction with snapping remains wasteful
 (Section~\ref{sec:results-snapmargin}). Second, the two optimizer-side mechanisms are
-\emph{not} beneficial in isolation: the margin needs clean masks before gentleness is
+\emph{not} beneficial in isolation. The margin needs clean masks before gentleness is
 affordable, and the smoothness prior trades structure for compressibility. Third, the
-combination composes the benefits and cancels the costs: the clean masks let the
+combination composes the benefits and cancels the costs. The clean masks let the
 margin fire only on true runaways, the reduced teleport churn recovers the structure
 the prior alone gave up, and the result is the best structural quality of the chapter
 ($0.858$) with a $21\times$ lower leak than the baseline, full core coverage, bounded
 extent, a moderate primitive count, and the $43\times$ compression of
 Section~\ref{sec:results-smoothness}. Per frame
 (Figure~\ref{fig:improved-summary}b), the improvement is concentrated exactly where
-the baseline's failure modes lived: in the camouflage window the improved arm holds
+the baseline's failure modes lived. In the camouflage window the improved arm holds
 SSIM ${\sim}0.86$ where the baseline dips to $0.81$, and in the final third of the
 capture, where accumulated stray parking degrades the baseline to $0.78$, the
 improved arm stays above $0.82$. Mid-sequence, where the subject is well-lit and the
-masks were never the problem, the two arms coincide -- the mechanisms repair the
+masks were never the problem, the two arms coincide. The mechanisms repair the
 failure modes without touching what already worked.
 
 \begin{figure}[!ht]
@@ -2105,7 +2125,7 @@ failure modes without touching what already worked.
     \caption{The improved pipeline against the v2 baseline, per frame. (a)~Object
     PSNR: both arms ride the illumination-gap envelope of the input reference; the
     improved arm's cleaner masks admit slightly less bounce light mid-sequence.
-    (b)~Object SSIM: the improved arm is markedly more stable, winning precisely in
+    (b)~Object SSIM, where the improved arm is markedly more stable, winning precisely in
     the camouflage window (early frames) and the stray-accumulation regime (late
     frames) that the baseline's mechanisms mishandled.}
     \label{fig:improved-summary}
@@ -2118,7 +2138,7 @@ The v2 budget of $N_0 = 10\,000$ and $N_t = 3000$ was chosen conservatively, and
 Section~\ref{sec:results-velocity} already hinted that most of it is headroom: a
 warm-started frame reaches target quality in tens of steps. With the improved
 mechanisms in place the question was re-examined directly, because both budgets carry
-a real cost -- $N_t$ multiplies the wall-clock of every one of the $149$ tracking
+a real cost. $N_t$ multiplies the wall-clock of every one of the $149$ tracking
 blocks, and $N_0$ additionally sets how far densification grows the cloud that every
 later stage pays for.
 
@@ -2127,7 +2147,7 @@ extended $12\,000$ steps, recording object PSNR throughout
 (Figure~\ref{fig:budget}a). The fit is at ${\sim}38$\,dB by step $3000$ and
 ${\sim}39$\,dB by step $5000$; the remaining $7000$ steps buy roughly one further dB
 while densification quadruples the cloud ($5455$ primitives at step $5000$ against
-$20\,373$ at step $12\,000$) -- capacity that later tracking must drag through every
+$20\,373$ at step $12\,000$), capacity that later tracking must drag through every
 frame for marginal photometric return. (The deep spikes at steps $3000$, $6000$, and
 $9000$ are splatfacto's scheduled opacity resets, from which the fit recovers within
 tens of steps.) For the tracking budget, the full improved pipeline was re-trained
@@ -2149,24 +2169,24 @@ end to end at three reduced operating points, $(N_0, N_t) \in \{(5000, 1000),\,
     \end{tabular}
     \caption{Iteration-budget sweep of the improved pipeline (150 frames, full
     resolution, single GPU). Quality is flat across a ${9.3\times}$ range of
-    wall-clock: the generous budget was headroom, not necessity.}
+    wall-clock, so the generous budget was headroom, not necessity.}
     \label{tab:budget}
 \end{table}
 
-The outcome is unambiguous: across a $9.3\times$ range of wall-clock cost the four
+The outcome is unambiguous. Across a $9.3\times$ range of wall-clock cost the four
 operating points are statistically indistinguishable on every metric (object SSIM
 within $\pm 0.003$, identical coverage, identical leak). The velocity warm start and
 the hull seed were built precisely so that each frame begins near its solution; the
 budget sweep confirms that once they work, the optimizer needs hundreds, not
 thousands, of steps per frame. The smallest configuration, $N_0 = 3000$,
-$N_t = 300$, reconstructs the full 150-frame capture in \textbf{under eight minutes}
--- $9.3\times$ faster than the reference budget -- while its halved primitive count
+$N_t = 300$, reconstructs the full 150-frame capture in \textbf{under eight minutes},
+$9.3\times$ faster than the reference budget, while its halved primitive count
 (6225) also halves every per-frame file and the compressed archive.
 This configuration is adopted as the default protocol for further
 experimentation; the generous budget remains available where maximum headroom is
 wanted, but nothing measured here justifies its routine cost. One caveat carries over
 from Section~\ref{sec:results-velocity}: the small tracking budget is only sufficient
-\emph{because} the velocity prediction is active -- at $N_t$ in the hundreds a cold
+\emph{because} the velocity prediction is active. At $N_t$ in the hundreds a cold
 start no longer has time to re-traverse the inter-frame motion, so the warm start
 stops being a convenience and becomes the enabler of the whole speed-up.
 
@@ -2174,9 +2194,9 @@ stops being a convenience and becomes the enabler of the whole speed-up.
     \centering
     \includegraphics[width=\textwidth]{res/03_research/results/budget_sweep.png}
     \caption{Choosing the iteration budget. (a)~Frame-0 convergence under the
-    hysteresis masks: the fit is essentially converged by $3000$--$5000$ steps; the
+    hysteresis masks: the fit is essentially converged by $3000$ to $5000$ steps; the
     spikes are scheduled opacity resets. (b)~End-to-end quality against wall-clock for
-    the four budgets: the curve is flat, so the cheapest point ($3000/300$, under
+    the four budgets, where the curve is flat, so the cheapest point ($3000/300$, under
     eight minutes for the full capture) is adopted.}
     \label{fig:budget}
 \end{figure}
@@ -2186,17 +2206,17 @@ stops being a convenience and becomes the enabler of the whole speed-up.
 
 Read together, the measurements close the loop on the three problems posed at the
 start of the chapter. \emph{Temporal coherence} is delivered by the constant-topology
-tracking regime and is directly visible in the data: a fixed set of $11\,561$
+tracking regime and is directly visible in the data. A fixed set of $11\,561$
 primitives with bit-identical colours persists across all 150 frames, object SSIM and
 coverage hold flat for the entire capture, and the reconstruction decomposes into a
 tight bundle of per-primitive trajectories. \emph{Separation of motion from
 appearance} is enforced by three mutually reinforcing mechanisms whose failure modes
-were each produced on demand by the ablations: the silhouette supervision keeps
+were each produced on demand by the ablations. The silhouette supervision keeps
 leaked opacity at the $10^{-3}$ level where the naive loss floods the background to
 near-total opacity, the hull snapping bounds the cloud where the unclamped variant's
 runaway exceeds a hundred subject radii, and the frozen colours eliminate appearance
 drift at zero measured photometric cost. \emph{Bounded cost} follows from the
-visual-hull seed and the velocity warm start: without the seed, frame-0 does not
+visual-hull seed and the velocity warm start. Without the seed, frame-0 does not
 converge at a trackable primitive budget at all, and the warm start reaches target
 quality in a quarter of the steps a cold start needs, so the $71$-minute full capture
 carries deliberate headroom in its $3000$-step tracking budget. The output compresses
@@ -2209,20 +2229,20 @@ root by the shadow-aware hysteresis rule, which separates weak object evidence f
 weak illumination evidence by chromaticity and connectivity rather than by magnitude,
 raising mask IoU from $0.863$ to $0.962$ and healing the early-sequence silhouette
 holes outright. The over-aggressive strict stray test is graded by the
-distance-field margin, which cuts the per-frame teleports by an order of magnitude --
-but, instructively, only helps once the masks it consumes are trustworthy; on noisy
+distance-field margin, which cuts the per-frame teleports by an order of magnitude,
+but, instructively, only helps once the masks it consumes are trustworthy. On noisy
 silhouettes the blunt clamp was compensating for the segmentation, and the two
 repairs must land together. The per-frame attribute jitter that capped the
 compressor is damped at the source by the temporal smoothness prior, moving the
 default-quality compression from $27.8\times$ to $43.5\times$ at matched render
 fidelity. Combined, the three mechanisms deliver the best structural quality
 measured in this chapter (object SSIM $0.858$, background leak $21\times$ below the
-baseline, full core coverage) with the failure-mode frames -- camouflage window,
-late-sequence stray accumulation -- repaired rather than averaged away. Finally, the
-budget sweep converts the velocity-prediction efficiency claim into practice: with
+baseline, full core coverage) with the failure-mode frames, the camouflage window and
+the late-sequence stray accumulation, repaired rather than averaged away. Finally, the
+budget sweep converts the velocity-prediction efficiency claim into practice. With
 the improved mechanisms active, the full 150-frame capture reconstructs in under
 eight minutes at unchanged quality, a $9.3\times$ reduction that makes the method
-practical to iterate on. What remains bounded by the data itself -- the illumination
-gap of the room-free ground truth, and the quaternion channels that still resist
-temporal truncation -- marks the natural directions for the future work discussed in
+practical to iterate on. What remains bounded by the data itself, the illumination
+gap of the room-free ground truth and the quaternion channels that still resist
+temporal truncation, marks the natural directions for the future work discussed in
 the concluding chapter.
