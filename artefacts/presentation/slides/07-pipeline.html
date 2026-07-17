@@ -1,0 +1,62 @@
+<!-- 7 · METHOD PIPELINE -->
+<section>
+  <span class="kicker">Metoda</span>
+  <h2>Proponowany potok rekonstrukcji 4D</h2>
+  <p style="font-size: 0.62em; margin: 0 0 6px" class="dim">
+    Wejście: <b>4 nieruchome, skalibrowane kamery</b> obserwują ruch
+    + jedna <b>orbita</b> wokół pustego pomieszczenia.
+    Pierwsze klatki kamer stałych są puste — służą jako zdjęcia referencyjne
+    tła.
+  </p>
+  <div class="flow">
+    <div class="step">
+      <span class="badge" style="align-self: center">1</span>
+      <b>Statyczne tło</b>
+      puste pomieszczenie dopasowane klasycznym 3DGS: orbita + 4&nbsp;puste
+      klatki kamer stałych
+      <span class="dim">liczone raz, ≈40&nbsp;dB</span>
+    </div>
+    <div class="arrow">→</div>
+    <div class="step">
+      <span class="badge" style="align-self: center">2</span>
+      <b>Segmentacja</b>
+      każda klatka porównana ze zdjęciem pustego pokoju → maski sylwetek
+      <span class="dim">bez sieci neuronowych</span>
+    </div>
+    <div class="arrow">→</div>
+    <div class="step">
+      <span class="badge" style="align-self: center">3</span>
+      <b>Klatka 0</b>
+      <i>visual hull</i>: część wspólna stożków sylwetek inicjalizuje chmurę
+      wewnątrz obiektu
+      <span class="dim">gęste dopasowanie</span>
+    </div>
+    <div class="arrow">→</div>
+    <div class="step hot">
+      <span class="badge" style="align-self: center">4</span>
+      <b>Śledzenie</b>
+      klatki 1…T: jedna chmura, stała liczba splatów, zamrożone kolory
+      <span class="dim">optymalizowany tylko ruch</span>
+    </div>
+    <div class="arrow">→</div>
+    <div class="step">
+      <span class="badge" style="align-self: center">5</span>
+      <b>Wynik</b>
+      tło + plik na klatkę, kompresja DCT wzdłuż czasu
+      <span class="dim">odtwarzanie 4D w&nbsp;przeglądarce</span>
+    </div>
+  </div>
+  <p style="font-size: 0.72em; margin-top: 22px">
+    Tło rekonstruowane jest <b>raz</b> i&nbsp;współdzielone przez całe nagranie
+    — pliki klatek kodują
+    <b class="accent">wyłącznie to, co się zmienia</b>, więc koszt
+    i&nbsp;rozmiar rosną minimalnie z&nbsp;każdą klatką.
+  </p>
+  <aside class="notes">
+    ~1,25 min. Jedna decyzja organizuje całość: rozdzielenie sceny na statyczne
+    tło (problem rozwiązany — zwykły 3DGS) i&nbsp;dynamiczny przód (właściwy
+    wkład pracy). Wspomnij: puste pierwsze klatki kamer stałych trafiają też do
+    treningu tła — dokładają geometrię z&nbsp;punktów widzenia, z&nbsp;których
+    scena będzie faktycznie oglądana. Kroki 2–4 omówione na kolejnych slajdach.
+  </aside>
+</section>

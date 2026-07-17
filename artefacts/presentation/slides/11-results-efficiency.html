@@ -1,0 +1,47 @@
+<!-- 11 · RESULTS: EFFICIENCY -->
+<section>
+  <span class="kicker">Wyniki</span>
+  <h2>Predykcja prędkości i&nbsp;budżet iteracji</h2>
+  <div class="cols">
+    <div class="col wide">
+      <img
+        class="framed"
+        src="assets/velocity_convergence.png"
+        alt="Histogramy: kroki do 20 dB oraz jakość plateau, z predykcją prędkości i bez"
+        style="background: #fff"
+      />
+      <p class="caption">
+        Po lewej: liczba kroków optymalizacji do 20&nbsp;dB PSNR obiektu, na
+        klatkę. Po prawej: jakość po zbieżności. Niebieskie — z&nbsp;predykcją
+        prędkości, czerwone — bez.
+      </p>
+    </div>
+    <div class="col" style="font-size: 0.68em">
+      <ul>
+        <li>
+          Średnio <b class="accent">23</b> kroki na klatkę vs
+          <b class="warm">145</b> bez predykcji —
+          <b>84% mniej obliczeń</b> przy tym samym celu jakości.
+        </li>
+        <li>
+          Warm start podnosi też plateau: <b>29.3 vs 23.4&nbsp;dB</b>
+          (+5.9&nbsp;dB) — bez niego chmura każdą klatkę goni od zera
+          i&nbsp;dryfuje.
+        </li>
+        <li>
+          Oszczędność zamieniona na czas: budżet iteracji obniżony
+          10000/3000&nbsp;→&nbsp;3000/300 bez utraty jakości (SSIM 0.857 vs
+          0.858) — pełne <b class="accent">150 klatek Full&nbsp;HD
+          w&nbsp;7.8&nbsp;min</b> na jednym GPU (z&nbsp;72.8&nbsp;min).
+        </li>
+      </ul>
+    </div>
+  </div>
+  <aside class="notes">
+    ~1 min. Pomiar rzeczywisty z&nbsp;potoku: każda klatka trenowana do progu
+    20&nbsp;dB PSNR obiektu. Rozkład „z&nbsp;prędkością” jest wąski
+    i&nbsp;skupiony nisko — zbieżność jest przewidywalna, nie tylko szybsza.
+    Puenta trzecia: dzięki temu cały budżet iteracji dało się ściąć ~10×
+    (jakość płaska w&nbsp;całym zakresie), stąd 7.8 minuty na całą sekwencję.
+  </aside>
+</section>

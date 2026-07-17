@@ -1,0 +1,62 @@
+<!-- 9 · TRACKING -->
+<section>
+  <span class="kicker">Metoda · krok 4</span>
+  <h2>Śledzenie jednej chmury splatów</h2>
+  <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; margin-top: 8px">
+    <div class="card" style="grid-column: span 2">
+      <h3><span class="badge">1</span>Zamrożona topologia</h3>
+      <p>
+        Po klatce&nbsp;0 bez klonowania, dzielenia i&nbsp;przycinania —
+        <b>odpowiedniość splatów 1:1</b> w&nbsp;całym nagraniu.
+      </p>
+      <div class="mini-eq">\(|\mathcal{G}_t| = |\mathcal{G}_0|\)</div>
+    </div>
+    <div class="card" style="grid-column: span 2">
+      <h3><span class="badge">2</span>Zamrożone kolory</h3>
+      <p>
+        Harmoniki sferyczne zablokowane — zmiany obrazu <b>muszą</b> zostać
+        wyjaśnione ruchem, nie przemalowaniem.
+      </p>
+      <div class="mini-eq">\(c_t = c_0\)</div>
+    </div>
+    <div class="card" style="grid-column: span 2">
+      <h3><span class="badge">3</span>Warm start prędkością</h3>
+      <p>
+        Ekstrapolacja stałej prędkości przed każdą klatką — optymalizator
+        dopłaca tylko resztę przyspieszenia.
+      </p>
+      <div class="mini-eq">
+        \(\mu_t \leftarrow \mu_{t-1} + (\mu_{t-1} - \mu_{t-2})\)
+      </div>
+    </div>
+    <div class="card" style="grid-column: span 3">
+      <h3><span class="badge">4</span>Powrót zbiegów na kadłub</h3>
+      <p>
+        Splat poza wszystkimi sylwetkami, oddalony od <i>visual hulla</i>
+        o&nbsp;więcej niż margines \(\delta\), wraca na najbliższy woksel
+        kadłuba (historia prędkości zerowana). Margines rezerwuje interwencję
+        dla <b>prawdziwych uciekinierów</b> — 10× mniej teleportacji.
+      </p>
+    </div>
+    <div class="card" style="grid-column: span 3">
+      <h3><span class="badge">5</span>Wygładzanie w&nbsp;czasie</h3>
+      <p>
+        Kotwica L2 krycia, skali i&nbsp;rotacji do poprzedniej klatki
+        (pozycje wolne) — tłumi migotanie atrybutów ~100×
+        i&nbsp;czyni sekwencję podatną na kompresję.
+      </p>
+      <div class="mini-eq" style="font-size: 0.9em">
+        \(\mathcal{L}_{sm} = \lambda \sum_a \lVert a_t - a_{t-1} \rVert^2\)
+      </div>
+    </div>
+  </div>
+  <aside class="notes">
+    ~1,5 min. Mechanizmy 1–2 to twarde ograniczenia: jedyny sposób, by
+    optymalizator obniżył stratę, to przesuwać i&nbsp;kształtować splaty —
+    rekonstrukcja jest zmuszona podążać za fizycznym ruchem. Mechanizm 3
+    odpowiada za wydajność (wyniki dalej). Mechanizmy 4–5 stabilizują:
+    zbiegów łapie sylwetka + margines odległości, a&nbsp;prior wygładzający
+    zamienia atrybuty w&nbsp;gładkie szeregi czasowe — to on umożliwi
+    kompresję DCT.
+  </aside>
+</section>

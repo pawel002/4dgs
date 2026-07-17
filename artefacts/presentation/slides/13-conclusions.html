@@ -1,0 +1,62 @@
+<!-- 13 · CONCLUSIONS -->
+<section>
+  <span class="kicker">Podsumowanie</span>
+  <h2>Wkład i&nbsp;dalsze prace</h2>
+  <div class="cols" style="align-items: flex-start">
+    <div class="col">
+      <h3 class="accent">Wkład</h3>
+      <ul style="font-size: 0.66em">
+        <li>
+          Kompletny potok 4D <b>bez komponentów uczonych</b>: segmentacja
+          z&nbsp;histerezą, <i>visual hull</i>, śledzenie z&nbsp;zamrożoną
+          topologią i&nbsp;kolorami.
+        </li>
+        <li>
+          Reprezentacja jest jednocześnie zbiorem
+          <b>gęstych trajektorii</b> — analiza ruchu i&nbsp;kompresja 43×
+          „za darmo”.
+        </li>
+        <li>
+          150 klatek Full&nbsp;HD w&nbsp;<b>7.8&nbsp;min</b> na jednym GPU,
+          płynne odtwarzanie w&nbsp;przeglądarce.
+        </li>
+        <li>
+          Syntetyczny benchmark z&nbsp;dokładnymi pozami kamer + implementacja
+          w&nbsp;frameworku nerfstudio.
+        </li>
+      </ul>
+    </div>
+    <div class="col">
+      <h3 class="warm">Dalsze prace</h3>
+      <ul style="font-size: 0.66em">
+        <li>
+          <b>Nagrania rzeczywiste</b>: estymacja póz, szum sensora, dryf
+          ekspozycji.
+        </li>
+        <li>
+          <b>Zdarzenia topologiczne</b> — obiekty wchodzące do sceny
+          i&nbsp;ją opuszczające (sylwetki już dają sygnał detekcji).
+        </li>
+        <li>
+          Kompresja rotacji (ciągłość znaku kwaternionów)
+          i&nbsp;<b>streaming</b> długich nagrań.
+        </li>
+        <li>
+          <b>Relighting</b> — usunięcie zapieczonego oświetlenia
+          z&nbsp;zamrożonych kolorów.
+        </li>
+      </ul>
+    </div>
+  </div>
+  <p style="margin-top: 20px; font-size: 0.66em">
+    Lekcja centralna: <b class="accent">zamrożenie topologii
+    i&nbsp;wyglądu</b> zamienia trudny problem odwrotny w&nbsp;wykonalny
+    problem śledzenia — a&nbsp;wynik staje się przy okazji kompresowalny.
+  </p>
+  <aside class="notes">
+    ~45 s. Teza „mniej znaczy więcej”: w&nbsp;reżimie wnętrz
+    z&nbsp;nieruchomymi kamerami kilka twardych ograniczeń zastępuje całe
+    sieci neuronowe. Zastosowania: wideo wolumetryczne, analiza ruchu
+    (rehabilitacja, sport, ergonomia), produkcja wirtualna, cyfrowe bliźniaki.
+  </aside>
+</section>

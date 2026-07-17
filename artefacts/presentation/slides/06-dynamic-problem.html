@@ -1,0 +1,43 @@
+<!-- 6 · WHY DYNAMIC IS HARD -->
+<section>
+  <span class="kicker">Problem</span>
+  <h2>Sceny dynamiczne — dlaczego podejście „klatka po klatce” zawodzi</h2>
+  <div class="cards c4">
+    <div class="card">
+      <h3>Koszt obliczeniowy</h3>
+      <p>
+        Rekonstrukcja każdej klatki od zera: 1&nbsp;min wideo 30&nbsp;fps
+        oznacza, że statyczne tło odtwarzane jest na nowo <b>1800 razy</b>.
+      </p>
+    </div>
+    <div class="card">
+      <h3>Utrata odpowiedniości</h3>
+      <p>
+        Swobodna optymalizacja nie gwarantuje, że
+        <b>ten sam splat odpowiada tej samej cesze fizycznej</b> — trajektorie
+        i&nbsp;analiza ruchu stają się niemożliwe.
+      </p>
+    </div>
+    <div class="card">
+      <h3>Ruch „halucynowany” kolorem</h3>
+      <p>
+        Funkcja straty chętnie <b>przemalowuje</b> scenę zamiast
+        <b>przesuwać</b> jej elementy — poruszające się obiekty rozmazują się
+        w&nbsp;tle jako płaskie „obrazy”.
+      </p>
+    </div>
+    <div class="card">
+      <h3>Wzrost rozmiaru danych</h3>
+      <p>
+        Niezależna reprezentacja każdej klatki rośnie liniowo z&nbsp;<b>czasem
+        nagrania</b> — nie do utrzymania przy minutowych sekwencjach.
+      </p>
+    </div>
+  </div>
+  <aside class="notes">
+    ~1 min. Te cztery tryby porażki napędzają każdą decyzję projektową metody.
+    Podkreśl ruch halucynowany kolorem — to on motywuje późniejsze zamrożenie
+    kolorów w&nbsp;reprezentacji. Obserwacja kluczowa: w&nbsp;pomieszczeniu
+    zmienia się tylko mały fragment sceny — reszta jest statyczna.
+  </aside>
+</section>

@@ -1,7 +1,7 @@
 # Defense Presentation — Precise 3D Reconstruction of Indoor Environments
 
-A reveal.js deck (18 slides, ~20 minutes) with five interactive WebGL demos
-built from the thesis content.
+A reveal.js deck (14 slides, ~12 minutes) with two interactive WebGL demos,
+built from the final thesis content (method + measured results).
 
 ## Run it
 
@@ -11,8 +11,8 @@ built from the thesis content.
 ```
 
 The deck **must** be served over HTTP (the demos are ES modules, which browsers
-block over `file://`). Everything — reveal.js, three.js, images — is vendored
-locally, so **no internet connection is needed** during the defense.
+block over `file://`). Everything — reveal.js, three.js, MathJax, images — is
+vendored locally, so **no internet connection is needed** during the defense.
 
 ## Controls
 
@@ -27,27 +27,40 @@ locally, so **no internet connection is needed** during the defense.
 The interactive demos respond to mouse drag (orbit) and scroll (zoom) directly
 on the slide.
 
-## Structure
+## Structure (~12 min)
+
+| # | Slide | Time |
+|---|-------|------|
+| 1 | Title | 0:20 |
+| 2 | Plan | 0:20 |
+| 3 | Motivation | 0:40 |
+| 4 | 3D Gaussian Splatting primer (equations) | 1:30 |
+| 5 | **Live demo** — real trained 3DGS scene (1M gaussians) | 1:00 |
+| 6 | Why per-frame reconstruction of dynamic scenes fails | 1:00 |
+| 7 | Proposed 4D pipeline (background / segmentation / hull / tracking) | 1:15 |
+| 8 | Shadow-aware hysteresis segmentation (IoU 0.863 → 0.962) | 1:00 |
+| 9 | Tracking one splat cloud (5 mechanisms) | 1:30 |
+| 10 | **Live demo** — frozen-topology tracking + trajectories | 1:00 |
+| 11 | Results: velocity warm start (−84% steps) + iteration budget (7.8 min) | 1:00 |
+| 12 | Results: composite quality, leakage, 43× DCT compression | 1:00 |
+| 13 | Conclusions & future work | 0:45 |
+| 14 | Thank you (Q&A notes) | — |
+| 15–16 | Backup slides for Q&A (budget/compression, temporal montage) | — |
 
 ```
-index.html            the deck (18 slides, speaker notes included)
-css/theme.css         custom dark theme
-assets/               images taken from the thesis (res/, img/)
+index.html            the deck (slide order in SLIDE_FILES)
+slides/               one file per slide, speaker notes included
+css/theme.css         custom light theme
+assets/               images from the thesis (res/03_research/results)
 demos/
-  splats.html         hard points vs soft Gaussian splats (same primitives)
-  pointcloud.html     COLMAP-style sparse cloud + camera frusta
-  trajectory.html     the parametric capture path (ω slider)
+  gsplat.html         real 3DGS rasterizer (antimatter15/splat, WebGL2)
   dynamic.html        frozen-topology tracking + emergent static/dynamic split
-  velocity.html       linear velocity warm start vs no prediction
+  splats.html         hard points vs soft Gaussian splats (spare)
+  pointcloud.html     COLMAP-style sparse cloud + camera frusta (spare)
+  trajectory.html     parametric capture path (spare)
   room.js             shared procedural "synthetic room" generator
-vendor/               reveal.js 5.1.0 + three.js 0.160 (offline copies)
+vendor/               reveal.js 5.1.0 + three.js 0.160 + MathJax (offline)
 ```
 
-## Placeholders to replace when results are ready
-
-- Slide 16 "Experimental evaluation" — four placeholder cards (PSNR/SSIM tables,
-  ablations, real-world capture).
-- Slide 17 "Contributions & what's next" — marked as preliminary.
-- When real reconstructions exist, a `.splat`/`.ply` viewer (e.g.
-  mkkellogg/GaussianSplats3D) can replace the procedural room in
-  `demos/splats.html` and `demos/dynamic.html`.
+Result figures are copied from `artefacts/thesis/res/03_research/results/`;
+re-copy them after regenerating thesis figures to keep the deck in sync.

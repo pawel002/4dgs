@@ -1,0 +1,36 @@
+<!-- 8 · SEGMENTATION -->
+<section>
+  <span class="kicker">Metoda · krok 2–3</span>
+  <h2>Segmentacja przez odejmowanie tła z&nbsp;histerezą</h2>
+  <img
+    class="framed"
+    src="assets/seg_montage_improved.png"
+    alt="Porównanie segmentacji: pojedynczy próg vs histereza świadoma cieni"
+    style="width: 82%; display: block; margin: 0 auto; background: #fff"
+  />
+  <ul style="font-size: 0.6em; margin-top: 14px">
+    <li>
+      Różnica \(d\) względem zdjęcia pustego pokoju, dwa progi:
+      <b>silne</b> dowody \(d &gt; \tau_{hi}\), <b>słabe</b>
+      \(d &gt; \tau_{lo}\).
+    </li>
+    <li>
+      Słaby piksel zostaje przyjęty tylko, gdy <b>nie wygląda jak cień</b>
+      (zmiana chrominancji lub rozjaśnienie) <b>i</b> jest geodezyjnie
+      połączony z&nbsp;silnym dowodem.
+    </li>
+    <li>
+      Kamuflaż (manekin na tle dywanu) przestaje wybijać dziury w&nbsp;maskach:
+      IoU <b class="accent">0.863 → 0.962</b> (precyzja 0.986, czułość 0.975).
+      Maski sylwetek zasilają <i>visual hull</i> i&nbsp;nadzór śledzenia.
+    </li>
+  </ul>
+  <aside class="notes">
+    ~1 min. Pojedynczy próg (środek) gubi piksele, gdzie manekin przypadkiem ma
+    kolor dywanu — dziury we wszystkich 4 widokach fragmentują potem
+    rekonstrukcję. Histereza: słabe dowody dopuszczamy tylko, jeśli nie da się
+    ich wyjaśnić jako cień (cień ściemnia bez zmiany chrominancji)
+    i&nbsp;łączą się z&nbsp;silnymi. Zero uczenia, a&nbsp;wynik niemal
+    pokrywa się z&nbsp;referencją.
+  </aside>
+</section>
