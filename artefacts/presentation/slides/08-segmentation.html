@@ -1,36 +1,72 @@
 <!-- 8 · SEGMENTATION -->
 <section>
-  <span class="kicker">Metoda · krok 2–3</span>
-  <h2>Segmentacja przez odejmowanie tła z&nbsp;histerezą</h2>
+  <span class="kicker">Metoda · segmentacja</span>
+  <h2>Odejmowanie tła z&nbsp;histerezą świadomą cieni</h2>
   <img
     class="framed"
     src="assets/seg_montage_improved.png"
     alt="Porównanie segmentacji: pojedynczy próg vs histereza świadoma cieni"
-    style="width: 82%; display: block; margin: 0 auto; background: #fff"
+    style="width: 62%; display: block; margin: 0 auto; background: #fff"
   />
-  <ul style="font-size: 0.6em; margin-top: 14px">
-    <li>
-      Różnica \(d\) względem zdjęcia pustego pokoju, dwa progi:
-      <b>silne</b> dowody \(d &gt; \tau_{hi}\), <b>słabe</b>
-      \(d &gt; \tau_{lo}\).
-    </li>
-    <li>
-      Słaby piksel zostaje przyjęty tylko, gdy <b>nie wygląda jak cień</b>
-      (zmiana chrominancji lub rozjaśnienie) <b>i</b> jest geodezyjnie
-      połączony z&nbsp;silnym dowodem.
-    </li>
-    <li>
-      Kamuflaż (manekin na tle dywanu) przestaje wybijać dziury w&nbsp;maskach:
-      IoU <b class="accent">0.863 → 0.962</b> (precyzja 0.986, czułość 0.975).
-      Maski sylwetek zasilają <i>visual hull</i> i&nbsp;nadzór śledzenia.
-    </li>
-  </ul>
+  <p class="caption" style="text-align: center; margin-top: 6px">
+    Kadr z&nbsp;kamuflażem (manekin na tle dywanu): pojedynczy próg fragmentuje
+    sylwetkę, histereza odzyskuje ją niemal idealnie.
+  </p>
+  <div
+    style="display: grid; grid-template-columns: 1fr 1fr 1fr 0.68fr; gap: 14px; margin-top: 10px; align-items: stretch"
+  >
+    <div class="card" style="font-size: 0.5em; padding: 14px 16px">
+      <h3 style="font-size: 1em"><span class="badge">1</span>Dwa progi</h3>
+      <p style="text-align: center">
+        \( d(\mathbf{u}) = \tfrac{1}{3}\textstyle\sum_{k} \big| I_k(\mathbf{u})
+        - I^{\mathrm{bg}}_k(\mathbf{u}) \big| \)<br />
+        \( \mathcal{S}_{\text{hi}} = [\, d > \tau_{\text{hi}} \,], \qquad
+        \mathcal{S}_{\text{lo}} = [\, d > \tau_{\text{lo}} \,] \)
+      </p>
+      <p class="dim" style="margin-top: 6px">
+        Silne dowody \(\mathcal{S}_{\text{hi}}\) zawsze przyjęte, słabe
+        \(\mathcal{S}_{\text{lo}}\) warunkowo.
+      </p>
+    </div>
+    <div class="card" style="font-size: 0.5em; padding: 14px 16px">
+      <h3 style="font-size: 1em"><span class="badge">2</span>Weto cienia</h3>
+      <p style="text-align: center">
+        \( \tfrac{1}{3}\big\| \mathbf{c}_t - \mathbf{c}^{\mathrm{bg}} \big\|_1
+        \le \tau_c \;\;\wedge\;\; \ell_t &lt; \ell^{\mathrm{bg}} \)
+      </p>
+      <p class="dim" style="margin-top: 6px">
+        Cień ściemnia piksel bez zmiany chromatyczności. Taki słaby piksel jest
+        odrzucany.
+      </p>
+    </div>
+    <div class="card" style="font-size: 0.5em; padding: 14px 16px">
+      <h3 style="font-size: 1em"><span class="badge">3</span>Łączność</h3>
+      <p style="text-align: center">
+        \( \mathcal{S}^{(n+1)} = \mathrm{dilate}\big(\mathcal{S}^{(n)}\big) \cap
+        \mathcal{S}_{\text{lo}}, \quad \mathcal{S}^{(0)} \subseteq
+        \mathcal{S}_{\text{hi}} \)
+      </p>
+      <p class="dim" style="margin-top: 6px">
+        Słaby piksel zostaje tylko wtedy, gdy ścieżka słabych pikseli łączy go
+        z&nbsp;silnym dowodem.
+      </p>
+    </div>
+    <div class="card stat-block" style="font-size: 0.5em; padding: 14px 10px; display: flex; flex-direction: column; justify-content: center">
+      <span class="lbl" style="margin-bottom: 2px">IoU masek</span>
+      <span class="num">0.863&nbsp;→&nbsp;0.962</span>
+      <span class="lbl">
+        pojedynczy próg → histereza<br />precyzja 0.986 · czułość 0.975
+      </span>
+    </div>
+  </div>
   <aside class="notes">
     ~1 min. Pojedynczy próg (środek) gubi piksele, gdzie manekin przypadkiem ma
     kolor dywanu — dziury we wszystkich 4 widokach fragmentują potem
-    rekonstrukcję. Histereza: słabe dowody dopuszczamy tylko, jeśli nie da się
-    ich wyjaśnić jako cień (cień ściemnia bez zmiany chrominancji)
-    i&nbsp;łączą się z&nbsp;silnymi. Zero uczenia, a&nbsp;wynik niemal
-    pokrywa się z&nbsp;referencją.
+    rekonstrukcję. Równania: (1) różnica względem zdjęcia pustego pokoju
+    i&nbsp;dwa progi; (2) słabe dowody odrzucamy, jeśli dają się wyjaśnić jako
+    cień — ściemnienie bez zmiany chromatyczności; (3) resztę przyjmujemy tylko
+    przy geodezyjnym połączeniu z&nbsp;silnym dowodem (fixpoint maskowanej
+    dylatacji). Zero uczenia, a&nbsp;maski niemal pokrywają się
+    z&nbsp;referencją. Maski zasilają visual hull i&nbsp;nadzór śledzenia.
   </aside>
 </section>

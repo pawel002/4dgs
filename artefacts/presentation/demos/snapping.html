@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8" />
+<title>Hull snapping — animacja poglądowa</title>
+<link rel="stylesheet" href="demo.css" />
+</head>
+<body>
+<div class="tag" id="phase">śledzenie…</div>
+<div class="hint">kliknij, aby zatrzymać</div>
+<div class="hud" style="justify-content: center; gap: 20px">
+  <span><span style="color:#0d9488">●</span>&nbsp;splat śledzi obiekt</span>
+  <span><span style="color:#ea580c">●</span>&nbsp;zbieg bez gradientu</span>
+  <span style="color:#64748b">przerywany obrys: <i>visual hull</i> + margines δ</span>
+</div>
+<canvas id="cv"></canvas>
+
+<script>
+(function () {
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+  const phaseEl = document.getElementById('phase');
+
+  let W = 0, H = 0, k = 1;
+  function resize() {
+    W = innerWidth; H = innerHeight;
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    cv.width = W * dpr; cv.height = H * dpr;
+    cv.style.width = W + 'px'; cv.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    k = Math.min(W / 640, H / 560);
+  }
+  addEventListener('resize', () => { resize(); placeOnTargets(); });
+  resize();
+
+  // Subject silhouette: a simple standing figure made of three discs
+  // (head, torso, hips), in unscaled "body units".
+  const SHAPE = [
+    { x: 0, y: -118, r: 36 },
+    { x: 0, y: -24, r: 62 },
+    { x: 0, y: 70, r: 52 },
+  ];
+  const rnd = (a, b) => a + Math.random() * (b - a);
+
+  // Splats: fixed offsets sampled inside the silhouette.
+  const parts = [];
+  while (parts.length < 110) {
+    const x = rnd(-72, 72), y = rnd(-158, 126);
+    if (SHAPE.some(c => Math.hypot(x - c.x, y - c.y) < c.r - 7)) {
+      parts.push({
+        ox: x, oy: y,          // rest offset inside the body
+        x: 0, y: 0, a: 1,      // current position and opacity
+        state: 'track',        // track | stray | snap
+        kind: '',              // run | stuck
+        vx: 0, vy: 0,
+        sx: 0, sy: 0, tx: 0, ty: 0, // snap interpolation endpoints
+      });
+    }
+  }
+
+  function subjectCenter(mt) {
+    return {
+      x: W / 2 + W * 0.30 * Math.sin(mt * 0.5),
+      y: H * 0.47 + 9 * k * Math.sin(mt * 1.9),
+    };
+  }
+
+  function placeOnTargets() {
+    const c0 = subjectCenter(motionT);
+    for (const p of parts) {
+      if (p.state !== 'track') continue;
+      p.x = c0.x + p.ox * k;
+      p.y = c0.y + p.oy * k;
+    }
+  }
+
+  // Signed distance to the silhouette (negative inside) and the closest
+  // point on its surface — the snap target.
+  function surface(px, py, c) {
+    let best = null, bestD = Infinity;
+    for (const s of SHAPE) {
+      const cx = c.x + s.x * k, cy = c.y + s.y * k, r = s.r * k;
+      const d = Math.hypot(px - cx, py - cy);
+      const sd = d - r;
+      if (sd < bestD) {
+        bestD = sd;
+        const n = d > 1e-6 ? 1 / d : 0;
+        best = { x: cx + (px - cx) * n * r, y: cy + (py - cy) * n * r, sd };
+      }
+    }
+    return best;
+  }
+
+  const TRACK_DUR = 2.6, SNAP_DUR = 0.85;
+  let phase = 'track', phaseT = 0, motionT = 0, frameNo = 1, spawned = 0;
+  let paused = false;
+  cv.addEventListener('click', () => { paused = !paused; });
+
+  placeOnTargets();
+
+  function spawnStrays(kind, n) {
+    const pool = parts.filter(p => p.state === 'track');
+    for (let i = 0; i < n && pool.length; i++) {
+      const p = pool.splice((Math.random() * pool.length) | 0, 1)[0];
+      p.state = 'stray';
+      p.kind = kind;
+      if (kind === 'run') {
+        const ang = rnd(0, Math.PI * 2);
+        const sp = rnd(70, 115) * k;
+        p.vx = Math.cos(ang) * sp;
+        p.vy = Math.sin(ang) * sp * 0.55;
+      } else {
+        p.vx = 0; p.vy = 0;
+      }
+    }
+  }
+
+  function beginSnap() {
+    frameNo++;
+    const c = subjectCenter(motionT);
+    for (const p of parts) {
+      if (p.state !== 'stray') continue;
+      const s = surface(p.x, p.y, c);
+      if (s.sd > 7 * k) {
+        p.state = 'snap';
+        p.sx = p.x; p.sy = p.y; p.tx = s.x; p.ty = s.y;
+      } else {
+        p.state = 'track'; // borderline: left to the optimizer
+      }
+    }
+    phase = 'snap'; phaseT = 0;
+  }
+
+  function endSnap() {
+    for (const p of parts) if (p.state === 'snap') { p.state = 'track'; p.a = 1; }
+    phase = 'track'; phaseT = 0; spawned = 0;
+  }
+
+  const ease = t => 1 - Math.pow(1 - t, 3);
+
+  function update(dt) {
+    phaseT += dt;
+    if (phase === 'track') {
+      motionT += dt;
+      if (spawned === 0 && phaseT > 0.5) { spawnStrays('run', 2); spawned = 1; }
+      if (spawned === 1 && phaseT > 1.4) { spawnStrays('stuck', 1); spawnStrays('run', 1); spawned = 2; }
+      if (phaseT >= TRACK_DUR) beginSnap();
+    } else if (phaseT >= SNAP_DUR) {
+      endSnap();
+    }
+
+    const c = subjectCenter(motionT);
+    const follow = 1 - Math.exp(-dt * 9);
+    for (const p of parts) {
+      if (p.state === 'track') {
+        p.x += (c.x + p.ox * k - p.x) * follow + rnd(-0.35, 0.35);
+        p.y += (c.y + p.oy * k - p.y) * follow + rnd(-0.35, 0.35);
+        p.a += (1 - p.a) * Math.min(1, dt * 5);
+      } else if (p.state === 'stray') {
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.a += (0.4 - p.a) * Math.min(1, dt * 2.5);
+      } else { // snap
+        const u = ease(Math.min(1, phaseT / SNAP_DUR));
+        p.x = p.sx + (p.tx - p.sx) * u;
+        p.y = p.sy + (p.ty - p.sy) * u;
+        p.a = 0.4 + 0.6 * u;
+      }
+    }
+  }
+
+  function silhouettePath(c, grow) {
+    ctx.beginPath();
+    for (const s of SHAPE) {
+      const r = s.r * k + grow;
+      ctx.moveTo(c.x + s.x * k + r, c.y + s.y * k);
+      ctx.arc(c.x + s.x * k, c.y + s.y * k, r, 0, Math.PI * 2);
+    }
+  }
+
+  function draw() {
+    const c = subjectCenter(motionT);
+    ctx.clearRect(0, 0, W, H);
+
+    // true silhouette
+    silhouettePath(c, 0);
+    ctx.fillStyle = 'rgba(51, 65, 85, 0.07)';
+    ctx.fill();
+
+    // hull + margin outlines around the frame boundary
+    if (phase === 'snap') {
+      ctx.save();
+      ctx.setLineDash([7, 6]);
+      ctx.strokeStyle = 'rgba(13, 148, 136, 0.85)';
+      ctx.lineWidth = 2;
+      silhouettePath(c, 0);
+      ctx.stroke();
+      ctx.setLineDash([3, 6]);
+      ctx.strokeStyle = 'rgba(13, 148, 136, 0.35)';
+      ctx.lineWidth = 1.5;
+      silhouettePath(c, 12 * k);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // motion streaks of runaways
+    ctx.strokeStyle = 'rgba(234, 88, 12, 0.35)';
+    ctx.lineWidth = 1.5;
+    for (const p of parts) {
+      if (p.state === 'stray' && p.kind === 'run') {
+        ctx.beginPath();
+        ctx.moveTo(p.x - p.vx * 0.22, p.y - p.vy * 0.22);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+      }
+    }
+
+    // splats
+    const r = Math.max(2.4, 3.1 * k);
+    for (const p of parts) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = p.state === 'track'
+        ? `rgba(13, 148, 136, ${0.85 * p.a})`
+        : `rgba(234, 88, 12, ${Math.max(0.35, p.a)})`;
+      ctx.fill();
+      // landing flash at the end of a snap
+      if (p.state === 'snap' && phaseT / SNAP_DUR > 0.7) {
+        const g = (phaseT / SNAP_DUR - 0.7) / 0.3;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, r + g * 9 * k, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(13, 148, 136, ${0.7 * (1 - g)})`;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    }
+
+    phaseEl.innerHTML = phase === 'track'
+      ? `klatka t = ${frameNo} · <b>śledzenie</b>: zbiegi nie dostają gradientu`
+      : `granica klatki · <b>SNAP</b>: powrót na visual hull`;
+  }
+
+  // Deterministic fast-forward for testing, e.g. snapping.html?ff=2.9;
+  // applied on the first frame, once the final layout is known.
+  const ff = parseFloat(new URLSearchParams(location.search).get('ff') || '0');
+  let booted = false;
+
+  let last = performance.now() / 1000;
+  function tick() {
+    requestAnimationFrame(tick);
+    const now = performance.now() / 1000;
+    const dt = Math.min(now - last, 0.05);
+    last = now;
+    if (paused) return;
+    // The iframe may be laid out after the script ran; keep the geometry honest.
+    if (innerWidth !== W || innerHeight !== H) { resize(); placeOnTargets(); }
+    if (!booted) {
+      booted = true;
+      placeOnTargets();
+      if (ff > 0) for (let i = 0; i < ff * 60; i++) update(1 / 60);
+    }
+    update(dt);
+    draw();
+  }
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

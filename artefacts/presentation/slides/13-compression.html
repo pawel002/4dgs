@@ -1,0 +1,65 @@
+<!-- 13 · TEMPORAL COMPRESSION -->
+<section>
+  <span class="kicker">Metoda · zapis</span>
+  <h2>Kompresja w&nbsp;dziedzinie czasu</h2>
+  <div class="cols" style="align-items: flex-start; gap: 34px">
+    <div class="col" style="font-size: 0.62em">
+      <p style="margin-top: 0">
+        Dzięki stałej topologii każdy atrybut każdego splatu, czytany przez
+        wszystkie klatki, jest <b>gładkim szeregiem czasowym</b>. Zamiast 150
+        niezależnych plików wystarczy kilka współczynników na atrybut:
+      </p>
+      <ul style="margin-top: 0">
+        <li><b>zero</b>: nieużywane pola (normale) tylko oznaczane flagą,</li>
+        <li>
+          <b>stałe</b>: zamrożone kolory (48 z&nbsp;62 atrybutów!) zapisane raz,
+          bezstratnie,
+        </li>
+        <li>
+          <b>zmienne</b>: pozycja, krycie, skala, rotacja → <b>DCT wzdłuż osi
+          czasu</b>, zachowane tylko najniższe częstotliwości.
+        </li>
+      </ul>
+      <div class="eqbox" style="font-size: 0.8em; text-align: center; margin: 12px 0">
+        \( \hat{a}[k] = \sqrt{\tfrac{2}{F}}\, \beta_k \sum_{t=0}^{F-1} a(t)
+        \cos\!\Big[\tfrac{\pi}{F}\big(t + \tfrac{1}{2}\big) k\Big] \)
+        <span class="dim" style="display: block; margin-top: 6px">
+          liczba współczynników \(K\) dobierana adaptacyjnie: najmniejsza, która
+          zachowuje ułamek \(q\) energii sygnału
+        </span>
+      </div>
+      <p>
+        DCT zamiast DFT, bo ruch jest <b>nieokresowy</b>: transformata Fouriera
+        widzi sztuczny skok między ostatnią a&nbsp;pierwszą klatką i&nbsp;rozlewa
+        energię po wysokich częstotliwościach.
+      </p>
+      <p style="margin-bottom: 0">
+        Wynik: <b class="accent">430&nbsp;MB → ~10&nbsp;MB (43.5×)</b> przy
+        ~27&nbsp;dB wierności renderu. Dekompresja odtwarza zwykłe pliki na
+        klatkę, czytelne dla każdej przeglądarki 3DGS.
+      </p>
+    </div>
+    <div class="col" style="flex: 1.05">
+      <img
+        class="framed"
+        src="assets/compression.png"
+        alt="Krzywa kompresja–jakość DCT oraz budżet współczynników na atrybut"
+        style="background: #fff"
+      />
+      <p class="caption">
+        Krzywa kompresja vs jakość sterowana jednym pokrętłem \(q\) oraz liczba
+        zachowanych współczynników DCT na atrybut. Gładkie pozycje potrzebują
+        ~20 z&nbsp;150 współczynników, koszt koncentruje się w&nbsp;rotacjach.
+        Prior wygładzający przesuwa punkt pracy z&nbsp;27.8× na 43.5×.
+      </p>
+    </div>
+  </div>
+  <aside class="notes">
+    ~45 s. Kolumna kompresji jest lustrem metody: co reżim śledzenia trzyma
+    stałe (kolory), nie kosztuje nic; co porusza się gładko (pozycje), kosztuje
+    mało; co zostaje wolne (rotacje), jest drogie. Kwantyzacja do half
+    precision praktycznie bezstratna, bo dominuje błąd obcięcia. Kwaterniony
+    opierają się obcięciu (dwuznaczność znaku) i&nbsp;to kierunek dalszych
+    prac.
+  </aside>
+</section>

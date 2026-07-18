@@ -2,13 +2,13 @@
 <section>
   <span class="kicker">Wprowadzenie</span>
   <h2>3D Gaussian Splatting (3DGS)</h2>
-  <div class="cols" style="align-items: stretch; gap: 34px">
+  <div class="cols" style="align-items: flex-start; gap: 34px">
     <div class="col">
-      <p style="font-size: 0.7em; margin: 0 0 0.35em">
+      <p style="font-size: 0.66em; margin: 0 0 0.35em">
         Scena to zbiór <b>miękkich elipsoidalnych cząstek</b> (gaussianów).
         Każda z&nbsp;nich posiada:
       </p>
-      <ul style="font-size: 0.62em; margin-top: 0">
+      <ul style="font-size: 0.58em; margin-top: 0">
         <li>
           <strong>Pozycję</strong> \(\mu_i\) — środek cząstki w&nbsp;przestrzeni
           3D.
@@ -18,53 +18,61 @@
           \(\Sigma_i = R_i S_i S_i^{\top} R_i^{\top}\) — kształt
           i&nbsp;orientację (wektor skali \(S_i\), rotacja \(R_i\)).
         </li>
-        <li><strong>Krycie</strong> \(\alpha_i\) — stopień przezroczystości.</li>
+        <li>
+          <strong>Krycie</strong> \(\alpha_i\) — stopień przezroczystości.
+        </li>
         <li>
           <strong>Kolor</strong> \(c_i\) — współczynniki harmonik sferycznych,
           kolor zależy od kierunku patrzenia.
         </li>
       </ul>
-      <div class="eqbox" style="font-size: 0.72em; text-align: center">
+      <div
+        class="eqbox"
+        style="font-size: 0.66em; text-align: center; margin: 12px 0 0"
+      >
         \( G_i(x) \;=\; \exp\!\Big( -\tfrac{1}{2} \, (x-\mu_i)^{\top}
         \Sigma_i^{-1} (x-\mu_i) \Big) \)
       </div>
     </div>
-    <div class="col" style="display: flex; flex-direction: column">
-      <p style="font-size: 0.7em; margin: 0 0 0.35em">
+    <div class="col">
+      <p style="font-size: 0.66em; margin: 0 0 0.35em">
         Rendering przez <b>splatting</b>: rzut na płaszczyznę obrazu, sortowanie
-        wg głębi i&nbsp;mieszanie alfa:
+        wg głębi i&nbsp;alpha-blending:
       </p>
-      <div class="eqbox" style="font-size: 0.72em; text-align: center; margin-top: 0">
+      <div
+        class="eqbox"
+        style="font-size: 0.66em; text-align: center; margin: 0"
+      >
         \( C(p) \;=\; \sum_{i=1}^{N} c_i \, \alpha_i' \prod_{j&lt;i} \big(1 -
         \alpha_j'\big) \)
       </div>
-      <ul style="font-size: 0.62em; margin-top: 0">
+      <ul style="font-size: 0.58em; margin-top: 0.55em">
         <li>
-          Rasteryzer jest <b>różniczkowalny</b> — wszystkie atrybuty
-          optymalizowane gradientowo względem błędu fotometrycznego.
+          Rasteryzer jest <b>różniczkowalny</b>, więc wszystkie atrybuty
+          optymalizuje się gradientowo względem błędu fotometrycznego.
         </li>
         <li>
-          <b>Adaptacyjna gęstość</b>: klonowanie / podział / przycinanie cząstek
-          w&nbsp;trakcie treningu.
+          <b>Adaptacyjna gęstość</b>: klonowanie, podział i&nbsp;przycinanie
+          cząstek w&nbsp;trakcie treningu.
         </li>
         <li>
-          Reprezentacja <b>jawna</b> — jeden plik <code>.ply</code>, rendering
+          Reprezentacja <b>jawna</b>: jeden plik <code>.ply</code>, rendering
           w&nbsp;czasie rzeczywistym.
         </li>
       </ul>
-      <div style="margin-top: auto">
-        <img
-          class="framed"
-          src="assets/gaussian-pipeline.png"
-          alt="Potok 3DGS"
-          style="max-width: 100%; max-height: 165px; display: block; margin: 0 auto"
-        />
-        <p class="caption">
-          Pętla optymalizacji 3DGS (Kerbl i&nbsp;in., 2023), inicjalizowana
-          punktami SfM
-        </p>
-      </div>
     </div>
+  </div>
+  <div style="margin-top: 14px">
+    <img
+      class="framed"
+      src="assets/gaussian-pipeline.png"
+      alt="Pętla optymalizacji 3DGS"
+      style="max-height: 162px; max-width: 88%; display: block; margin: 0 auto"
+    />
+    <p class="caption" style="text-align: center; margin-top: 6px">
+      Pętla optymalizacji 3DGS (Kerbl i&nbsp;in., 2023), inicjalizowana punktami
+      SfM
+    </p>
   </div>
   <aside class="notes">
     ~1,5 min. Kluczowy kontrast względem NeRF: brak ray marchingu, brak sieci —

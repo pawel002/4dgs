@@ -1,0 +1,63 @@
+<!-- 12 · HULL SNAPPING -->
+<section>
+  <span class="kicker">Metoda · stabilizacja</span>
+  <h2>Hull snapping: powrót zbiegów na obiekt</h2>
+  <div class="cols" style="align-items: stretch; gap: 34px">
+    <div class="col" style="font-size: 0.62em">
+      <p style="margin-top: 0">
+        <b>Problem.</b> Strata jest maskowana do sylwetki, więc splat, który
+        opuści obiekt, przestaje otrzymywać gradient. Predykcja prędkości wciąż
+        go przesuwa: <b class="warm">uciekinier</b> odlatuje po linii prostej,
+        a&nbsp;<b class="warm">maruder</b> zostaje w&nbsp;miejscu. Przy stałej
+        liczbie splatów nic ich nie zastępuje i&nbsp;obiekt z&nbsp;klatki na
+        klatkę ubożeje.
+      </p>
+      <p>
+        <b>Rozwiązanie.</b> Na początku każdej klatki <i>visual hull</i> jest
+        wyznaczany na nowo. Splat leżący poza sylwetkami kamer i&nbsp;dalej od
+        kadłuba niż margines \(\delta\) wraca na najbliższy woksel powierzchni,
+        a&nbsp;jego historia prędkości jest zerowana.
+      </p>
+      <div class="eqbox" style="font-size: 0.86em; text-align: center; margin: 12px 0">
+        \( \mu_i \leftarrow \arg\min_{\mathbf{x} \in \partial\mathcal{H}_t}
+        \lVert \mu_i - \mathbf{x} \rVert_2 \quad \text{gdy} \quad
+        \min_{\mathbf{x} \in \mathcal{H}_t} \lVert \mu_i - \mathbf{x} \rVert_2
+        > \delta v \)
+      </div>
+      <ul style="margin-top: 0">
+        <li>
+          zasięg chmury ograniczony: <b class="accent">0.25</b> vs
+          <b class="warm">33.9</b> bez mechanizmu (uciekinierzy odlatują
+          w&nbsp;nieskończoność)
+        </li>
+        <li>najlepszy SSIM obiektu ze wszystkich wariantów śledzenia</li>
+        <li>
+          margines \(\delta\) zostawia przypadki graniczne optymalizatorowi:
+          <b>10× mniej teleportacji</b>, interwencja tylko przy prawdziwych
+          uciekinierach
+        </li>
+      </ul>
+    </div>
+    <div class="col" style="flex: 1.1">
+      <iframe
+        class="demo-frame"
+        data-src="demos/snapping.html"
+        data-preload
+        style="height: 490px"
+      ></iframe>
+      <p class="caption" style="margin-top: 8px">
+        Animacja poglądowa: podczas śledzenia część splatów traci gradient
+        i&nbsp;ucieka, na granicy klatki wracają na powierzchnię
+        <i>visual hulla</i> i&nbsp;są ponownie wchłaniane przez obiekt.
+      </p>
+    </div>
+  </div>
+  <aside class="notes">
+    ~45 s. Dwa symetryczne tryby porażki maskowanej straty: uciekinier (stała
+    prędkość bez siły przywracającej) i&nbsp;maruder (zostaje tam, gdzie
+    stracił gradient). Snapping to jedyny wariant, który zbiegi odzyskuje,
+    a&nbsp;nie parkuje lub gubi. Bez marginesu binarny test flagował ~połowę
+    chmury co klatkę przy zaszumionych maskach; z&nbsp;czystymi maskami
+    i&nbsp;marginesem interwencje spadają o&nbsp;rząd wielkości.
+  </aside>
+</section>

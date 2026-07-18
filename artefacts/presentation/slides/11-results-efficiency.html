@@ -12,27 +12,31 @@
       />
       <p class="caption">
         Po lewej: liczba kroków optymalizacji do 20&nbsp;dB PSNR obiektu, na
-        klatkę. Po prawej: jakość po zbieżności. Niebieskie — z&nbsp;predykcją
-        prędkości, czerwone — bez.
+        klatkę. Po prawej: jakość po zbieżności. Niebieskie: z&nbsp;predykcją
+        prędkości, czerwone: bez.
       </p>
     </div>
     <div class="col" style="font-size: 0.68em">
+      <div class="mini-eq" style="font-size: 0.95em; margin: 0 0 14px">
+        \( \mu_t \leftarrow \mu_{t-1} + \underbrace{(\mu_{t-1} -
+        \mu_{t-2})}_{\text{prędkość}} \)
+      </div>
       <ul>
         <li>
           Średnio <b class="accent">23</b> kroki na klatkę vs
-          <b class="warm">145</b> bez predykcji —
+          <b class="warm">145</b> bez predykcji, czyli
           <b>84% mniej obliczeń</b> przy tym samym celu jakości.
         </li>
         <li>
           Warm start podnosi też plateau: <b>29.3 vs 23.4&nbsp;dB</b>
-          (+5.9&nbsp;dB) — bez niego chmura każdą klatkę goni od zera
+          (+5.9&nbsp;dB). Bez niego chmura goni każdą klatkę od zera
           i&nbsp;dryfuje.
         </li>
         <li>
           Oszczędność zamieniona na czas: budżet iteracji obniżony
           10000/3000&nbsp;→&nbsp;3000/300 bez utraty jakości (SSIM 0.857 vs
-          0.858) — pełne <b class="accent">150 klatek Full&nbsp;HD
-          w&nbsp;7.8&nbsp;min</b> na jednym GPU (z&nbsp;72.8&nbsp;min).
+          0.858), więc pełne <b class="accent">150 klatek Full&nbsp;HD
+          w&nbsp;7.8&nbsp;min</b> na jednym GPU (wcześniej 72.8&nbsp;min).
         </li>
       </ul>
     </div>

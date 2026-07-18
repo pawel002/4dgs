@@ -2,61 +2,81 @@
 <section>
   <span class="kicker">Metoda</span>
   <h2>Proponowany potok rekonstrukcji 4D</h2>
-  <p style="font-size: 0.62em; margin: 0 0 6px" class="dim">
-    Wejście: <b>4 nieruchome, skalibrowane kamery</b> obserwują ruch
-    + jedna <b>orbita</b> wokół pustego pomieszczenia.
-    Pierwsze klatki kamer stałych są puste — służą jako zdjęcia referencyjne
-    tła.
+  <p style="font-size: 0.6em; margin: 0" class="dim">
+    Wejście: <b> nieruchome, skalibrowane kamery</b> obserwują ruch,
+    a&nbsp;jedna kamera wykonuje <b>orbitę</b> po pustym pomieszczeniu. Pierwsza
+    klatka każdej stałej kamery to zdjęcie pustego pokoju.
   </p>
-  <div class="flow">
-    <div class="step">
-      <span class="badge" style="align-self: center">1</span>
-      <b>Statyczne tło</b>
-      puste pomieszczenie dopasowane klasycznym 3DGS: orbita + 4&nbsp;puste
-      klatki kamer stałych
-      <span class="dim">liczone raz, ≈40&nbsp;dB</span>
+
+  <div class="pipe2">
+    <div class="lane-tag">statyczne tło</div>
+    <div class="lane-nodes">
+      <div class="pnode">
+        <b>splatfacto (klasyczny 3DGS)</b>
+        <span class="sub">
+          puste pomieszczenie: orbita + &nbsp;zdjęcia referencyjne · liczone raz
+        </span>
+      </div>
+      <div class="pipe-arrow">→</div>
     </div>
-    <div class="arrow">→</div>
-    <div class="step">
-      <span class="badge" style="align-self: center">2</span>
-      <b>Segmentacja</b>
-      każda klatka porównana ze zdjęciem pustego pokoju → maski sylwetek
-      <span class="dim">bez sieci neuronowych</span>
+    <div class="pnode contrib merge">
+      <b>Render 4D</b>
+      <span class="sub"> tło + obiekt składane dynamicznie </span>
     </div>
-    <div class="arrow">→</div>
-    <div class="step">
-      <span class="badge" style="align-self: center">3</span>
-      <b>Klatka 0</b>
-      <i>visual hull</i>: część wspólna stożków sylwetek inicjalizuje chmurę
-      wewnątrz obiektu
-      <span class="dim">gęste dopasowanie</span>
+    <div class="lane-tag contrib">
+      Obiekt dynamiczny
+      <span class="sub">wkład pracy</span>
     </div>
-    <div class="arrow">→</div>
-    <div class="step hot">
-      <span class="badge" style="align-self: center">4</span>
-      <b>Śledzenie</b>
-      klatki 1…T: jedna chmura, stała liczba splatów, zamrożone kolory
-      <span class="dim">optymalizowany tylko ruch</span>
-    </div>
-    <div class="arrow">→</div>
-    <div class="step">
-      <span class="badge" style="align-self: center">5</span>
-      <b>Wynik</b>
-      tło + plik na klatkę, kompresja DCT wzdłuż czasu
-      <span class="dim">odtwarzanie 4D w&nbsp;przeglądarce</span>
+    <div class="lane-nodes">
+      <div class="pnode contrib">
+        <b>Segmentacja bez uczenia</b>
+        <span class="sub">odejmowanie tła z&nbsp;histerezą świadomą cieni</span>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pnode contrib">
+        <b>Visual hull → klatka&nbsp;0</b>
+        <span class="sub"> część wspólna stożków sylwetek </span>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pnode contrib core">
+        <b>Śledzenie</b>
+        <b>klatki 1,...,T</b>
+        <span class="sub">
+          <i>temporal-splatfacto</i>: jedna chmura, stała liczba splatów,
+          zamrożone kolory. Między klatkami: predykcja prędkości + hull snapping
+        </span>
+      </div>
+      <div class="pipe-arrow">→</div>
+      <div class="pnode contrib">
+        <b>Kompresja DCT</b>
+        <span class="sub"
+          >atrybuty jako szeregi czasowe, mniejszy zapis o rząd wielkości</span
+        >
+      </div>
+      <div class="pipe-arrow">→</div>
     </div>
   </div>
-  <p style="font-size: 0.72em; margin-top: 22px">
-    Tło rekonstruowane jest <b>raz</b> i&nbsp;współdzielone przez całe nagranie
-    — pliki klatek kodują
-    <b class="accent">wyłącznie to, co się zmienia</b>, więc koszt
-    i&nbsp;rozmiar rosną minimalnie z&nbsp;każdą klatką.
+
+  <div class="pipe-legend">
+    <span><span class="sw"></span>istniejące narzędzia</span>
+    <span>
+      <span class="sw contrib"></span>wkład pracy (każdy z&nbsp;podświetlonych
+      kroków omówiony na osobnym slajdzie)
+    </span>
+  </div>
+
+  <p style="font-size: 0.66em; margin-top: 18px">
+    Tło rekonstruowane jest <b>raz</b> i&nbsp;współdzielone przez całe nagranie.
+    Pliki klatek kodują <b class="accent">wyłącznie dynamiczne elementy</b>,
+    dzięki czemu pamięć nie jest marnowana na kodowanie statycznych elementów.
   </p>
   <aside class="notes">
     ~1,25 min. Jedna decyzja organizuje całość: rozdzielenie sceny na statyczne
     tło (problem rozwiązany — zwykły 3DGS) i&nbsp;dynamiczny przód (właściwy
     wkład pracy). Wspomnij: puste pierwsze klatki kamer stałych trafiają też do
     treningu tła — dokładają geometrię z&nbsp;punktów widzenia, z&nbsp;których
-    scena będzie faktycznie oglądana. Kroki 2–4 omówione na kolejnych slajdach.
+    scena będzie faktycznie oglądana. Podświetlone kroki (segmentacja, śledzenie
+    z&nbsp;predykcją prędkości i&nbsp;hull snappingiem, kompresja) wracają na
+    kolejnych slajdach jako osobne tematy.
   </aside>
 </section>

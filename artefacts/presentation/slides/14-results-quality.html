@@ -1,7 +1,7 @@
-<!-- 12 · RESULTS: QUALITY & SIZE -->
+<!-- 14 · RESULTS: QUALITY -->
 <section>
   <span class="kicker">Wyniki</span>
-  <h2>Jakość rekonstrukcji i&nbsp;rozmiar danych</h2>
+  <h2>Jakość rekonstrukcji</h2>
   <div class="cols" style="align-items: flex-start">
     <div class="col wide">
       <img
@@ -20,19 +20,21 @@
         <li>Maski sylwetek: IoU <b class="accent">0.962</b></li>
         <li>
           Obiekt: SSIM <b class="accent">0.858</b>, pokrycie 0.998, przeciek
-          w&nbsp;tło <b>21× niższy</b> od bazowego
-          (\(6 \cdot 10^{-5}\))
+          w&nbsp;tło <b>21× niższy</b> od bazowego (\(6 \cdot 10^{-5}\))
         </li>
         <li>Statyczne tło: <b class="accent">≈40&nbsp;dB</b> PSNR</li>
         <li>
-          Kompresja DCT wzdłuż czasu:
-          <b class="accent">43.5×</b> (430&nbsp;MB → ~10&nbsp;MB) przy
-          ~27&nbsp;dB wierności renderu — możliwa, bo topologia
-          i&nbsp;kolory są stałe, a&nbsp;atrybuty wygładzone.
+          Rekonstrukcja przewyższa jakość własnych danych wejściowych na
+          <b>149 ze 150 klatek</b>: fuzja czterech widoków uśrednia artefakty
+          pojedynczych masek.
+        </li>
+        <li>
+          SSIM i&nbsp;pokrycie są <b>płaskie przez całe nagranie</b>, więc
+          jakość nie degraduje z&nbsp;długością sekwencji.
         </li>
         <li class="dim">
           PSNR obiektu ogranicza luka oświetleniowa referencji (brak odbić
-          światła od pokoju) — sygnał niosą SSIM, pokrycie i&nbsp;przeciek.
+          światła od pokoju), dlatego sygnał niosą metryki strukturalne.
         </li>
       </ul>
     </div>
@@ -41,10 +43,10 @@
     ~1 min. Render złożony: dwa niezależne pliki (tło + klatka) nałożone na
     siebie — to jest finalny produkt odtwarzany w&nbsp;przeglądarce
     (przełączenie klatki = zmiana widoczności węzła, zero transferu). Uczciwie
-    o&nbsp;metryce: referencyjne renders obiektu nie zawierają światła
+    o&nbsp;metryce: referencyjne rendery obiektu nie zawierają światła
     odbitego od pokoju, więc PSNR obiektu ma sufit ~18&nbsp;dB dla
-    czegokolwiek — dyskryminują metryki strukturalne. Kompresja: DCT po osi
-    czasu na każdym atrybucie osobno; pozycje i&nbsp;krycie zwijają się do
-    kilku współczynników.
+    czegokolwiek — dyskryminują metryki strukturalne. Punkt o&nbsp;149/150:
+    model wielowidokowy jest bliżej prawdziwego obiektu niż jakikolwiek
+    pojedynczy zsegmentowany kadr.
   </aside>
 </section>

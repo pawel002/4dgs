@@ -129,6 +129,95 @@
 }
 .flow .step.hot { border-color: rgba(13, 148, 136, 0.5); background: rgba(13, 148, 136, 0.08); }
 
+/* --- two-lane method diagram (pipeline slide) ------------------------------ */
+.pipe2 {
+  display: grid;
+  grid-template-columns: 116px 1fr 168px;
+  gap: 14px 12px;
+  align-items: stretch;
+  margin: 20px 0 6px;
+}
+.pipe2 .lane-tag {
+  display: flex; flex-direction: column; justify-content: center;
+  font-size: 0.46em; font-weight: 700; line-height: 1.4;
+  letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--text-dim);
+}
+.pipe2 .lane-tag .sub {
+  font-weight: 500; letter-spacing: 0; text-transform: none;
+  font-size: 0.94em; color: var(--text-dim);
+}
+.pipe2 .lane-tag.contrib { color: var(--accent); }
+.pipe2 .lane-nodes { display: flex; align-items: stretch; min-width: 0; }
+.pnode {
+  flex: 1; min-width: 0;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 10px;
+  text-align: center;
+  font-size: 0.53em;
+  line-height: 1.38;
+  display: flex; flex-direction: column; justify-content: center; gap: 4px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+.pnode b { font-size: 1.08em; }
+.pnode .sub { color: var(--text-dim); font-size: 0.9em; }
+.pnode.contrib {
+  border-color: rgba(13, 148, 136, 0.5);
+  background: rgba(13, 148, 136, 0.06);
+}
+.pnode.core {
+  border-color: var(--accent);
+  background: rgba(13, 148, 136, 0.13);
+}
+.pnode.merge { grid-column: 3; grid-row: 1 / span 2; font-size: 0.56em; }
+.pipe2 .pipe-arrow {
+  flex: 0 0 auto; align-self: center;
+  color: var(--accent); font-size: 0.72em; padding: 0 6px;
+}
+.pipe-legend {
+  display: flex; gap: 28px; align-items: center;
+  margin-top: 12px;
+  font-size: 0.5em; color: var(--text-dim);
+}
+.pipe-legend .sw {
+  display: inline-block; width: 0.95em; height: 0.95em; border-radius: 4px;
+  margin-right: 7px; vertical-align: -0.12em;
+  border: 1px solid var(--border); background: var(--bg-soft);
+}
+.pipe-legend .sw.contrib {
+  border-color: rgba(13, 148, 136, 0.55);
+  background: rgba(13, 148, 136, 0.12);
+}
+
+/* --- vertical step loop (tracking slide) ----------------------------------- */
+.vsteps { display: flex; flex-direction: column; }
+.vsteps .vstep {
+  display: flex; align-items: center; gap: 14px;
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 16px;
+  font-size: 0.58em; line-height: 1.4;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+.vsteps .vstep .badge { flex: 0 0 auto; }
+.vsteps .vstep b { display: block; }
+.vsteps .varrow {
+  text-align: center; color: var(--accent);
+  font-size: 0.5em; line-height: 1.1; padding: 2px 0;
+}
+
+/* --- big stat block ---------------------------------------------------------- */
+.stat-block { text-align: center; }
+.stat-block .num {
+  display: block; font-size: 1.7em; font-weight: 700;
+  color: var(--accent); line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.stat-block .lbl { display: block; font-size: 0.8em; color: var(--text-dim); margin-top: 4px; }
+
 /* --- timeline -------------------------------------------------------------- */
 .timeline { display: flex; gap: 18px; margin-top: 30px; }
 .era {
