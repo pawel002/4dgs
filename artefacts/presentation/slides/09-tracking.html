@@ -2,87 +2,85 @@
 <section>
   <span class="kicker">Metoda · śledzenie</span>
   <h2>Śledzenie jednej chmury splatów</h2>
-  <div class="cols" style="align-items: stretch; gap: 36px">
-    <div class="col" style="display: flex; flex-direction: column; gap: 12px">
-      <div class="card" style="font-size: 0.62em">
-        <h3 style="font-size: 1em">🔒 Stałe po klatce&nbsp;0</h3>
-        <ul style="margin: 0 0 0 0.9em">
-          <li>
-            <b>liczba splatów</b> \(|\mathcal{G}_t| = |\mathcal{G}_0|\), bez
-            klonowania i&nbsp;przycinania
-          </li>
-          <li>
-            <b>kolory</b> \(c_t = c_0\), harmoniki sferyczne zablokowane
-          </li>
-        </ul>
-      </div>
-      <div class="card" style="font-size: 0.62em">
-        <h3 style="font-size: 1em">🔓 Optymalizowane w&nbsp;każdej klatce</h3>
-        <p>
-          pozycja \(\mu\), skala, rotacja, krycie. Strata fotometryczna liczona
-          <b>tylko wewnątrz maski sylwetki</b>.
-        </p>
-      </div>
-      <p style="font-size: 0.62em; margin: 4px 0 0">
-        Jedyny sposób obniżenia straty to <b>przesunięcie</b> splatów. Ruch nie
-        może zostać „udawany” przemalowaniem, a&nbsp;splat o&nbsp;numerze
-        \(i\) oznacza <b class="accent">tę samą cechę fizyczną</b> przez całe
-        nagranie.
+
+  <p
+    class="dim"
+    style="font-size: 0.5em; margin: 0 0 6px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 650"
+  >
+    Reguły: co stałe, co wolne
+  </p>
+  <div class="cards c2" style="gap: 18px; margin-top: 0">
+    <div class="card" style="font-size: 0.62em; padding: 16px 22px">
+      <h3 style="font-size: 1em">Stałe po klatce&nbsp;0</h3>
+      <p>
+        liczba splatów \(|\mathcal{G}_t| = |\mathcal{G}_0|\) oraz kolory
+        \(c_t = c_0\)
+      </p>
+      <p class="dim" style="margin-top: 6px">
+        Splat o&nbsp;numerze \(i\) oznacza tę samą cechę fizyczną w&nbsp;całym
+        nagraniu, a&nbsp;zmiany obrazu trzeba wyjaśnić ruchem, nie
+        przemalowaniem.
       </p>
     </div>
-    <div class="col">
-      <p class="dim" style="font-size: 0.56em; margin: 0 0 8px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600">
-        Pętla dla każdej klatki t
+    <div class="card" style="font-size: 0.62em; padding: 16px 22px">
+      <h3 style="font-size: 1em">Optymalizowane w&nbsp;każdej klatce</h3>
+      <p>pozycja \(\mu\), skala, rotacja, krycie</p>
+      <p class="dim" style="margin-top: 6px">
+        Strata fotometryczna liczona tylko wewnątrz maski sylwetki. Krycie
+        pozostaje trenowalne, aby splat pozbawiony gradientu mógł wygasnąć.
       </p>
-      <div class="vsteps">
-        <div class="vstep">
-          <span class="badge">1</span>
-          <span>
-            <b>Predykcja prędkości (warm start)</b>
-            \( \mu_t \leftarrow \mu_{t-1} + (\mu_{t-1} - \mu_{t-2}) \)
-          </span>
-        </div>
-        <div class="varrow">▼</div>
-        <div class="vstep">
-          <span class="badge">2</span>
-          <span>
-            <b>Hull snapping</b>
-            splaty, które uciekły z&nbsp;obiektu, wracają na powierzchnię
-            <i>visual hulla</i> bieżącej klatki
-          </span>
-        </div>
-        <div class="varrow">▼</div>
-        <div class="vstep">
-          <span class="badge">3</span>
-          <span>
-            <b>Krótka optymalizacja (\(N_t\) kroków)</b>
-            strata w&nbsp;masce + nadzór sylwetki + kotwica wygładzająca
-            krycie, skalę i&nbsp;rotację w&nbsp;czasie
-          </span>
-        </div>
-        <div class="varrow">▼</div>
-        <div class="vstep">
-          <span class="badge">4</span>
-          <span>
-            <b>Zapis klatki \(t\)</b>
-            przejście do klatki \(t+1\)
-          </span>
-        </div>
-      </div>
     </div>
   </div>
-  <p style="font-size: 0.62em; margin-top: 16px">
-    Efekt: chmura porusza się jak jedno spójne ciało. Rekonstrukcja to
-    równocześnie <b class="accent">~11,5&nbsp;tys. gęstych trajektorii 3D</b>,
-    a&nbsp;jakość nie spada z&nbsp;długością sekwencji.
+
+  <p
+    class="dim"
+    style="font-size: 0.5em; margin: 16px 0 6px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 650"
+  >
+    Pętla dla każdej klatki t
+  </p>
+  <div class="flow" style="margin: 0">
+    <div class="step" style="justify-content: flex-start; gap: 4px">
+      <span class="badge" style="align-self: center">1</span>
+      <b>Predykcja prędkości</b>
+      \( \mu_t \leftarrow \mu_{t-1} + (\mu_{t-1} - \mu_{t-2}) \)
+      <span class="dim">inicjalizacja blisko rozwiązania</span>
+    </div>
+    <div class="arrow">→</div>
+    <div class="step" style="justify-content: flex-start; gap: 4px">
+      <span class="badge" style="align-self: center">2</span>
+      <b>Hull snapping</b>
+      splaty, które opuściły obiekt, wracają na powierzchnię
+      <i>visual hulla</i>
+    </div>
+    <div class="arrow">→</div>
+    <div class="step" style="justify-content: flex-start; gap: 4px">
+      <span class="badge" style="align-self: center">3</span>
+      <b>Krótka optymalizacja</b>
+      strata w&nbsp;masce + nadzór sylwetki + wygładzanie atrybutów
+    </div>
+    <div class="arrow">→</div>
+    <div class="step" style="justify-content: flex-start; gap: 4px">
+      <span class="badge" style="align-self: center">4</span>
+      <b>Zapis klatki \(t\)</b>
+      przejście do klatki \(t+1\)
+      <span class="dim">↩ powrót do kroku 1</span>
+    </div>
+  </div>
+
+  <p
+    style="margin-top: 14px; font-size: 0.6em; padding: 9px 14px; border-radius: 10px; background: rgba(13, 148, 136, 0.07); border: 1px solid rgba(13, 148, 136, 0.25)"
+  >
+    Efekt: chmura porusza się jak jedno spójne ciało. Rekonstrukcja jest
+    zarazem zbiorem <b class="accent">~11,5&nbsp;tys. gęstych trajektorii
+    3D</b>, a&nbsp;jakość nie spada wraz z&nbsp;długością sekwencji.
   </p>
   <aside class="notes">
-    ~1,5 min. Lewa strona: twarde ograniczenia. Zamrożona liczba splatów daje
+    ~1,5 min. Górny pas: twarde ograniczenia. Zamrożona liczba splatów daje
     odpowiedniość 1:1 (trajektorie), zamrożone kolory wymuszają wyjaśnianie
-    zmian obrazu ruchem, nie przemalowaniem. Prawa strona: tania pętla na
-    klatkę — warm start sprawia, że optymalizator dopłaca tylko resztę
-    przyspieszenia; snapping i&nbsp;wygładzanie stabilizują długie sekwencje
-    (szczegóły na kolejnych slajdach). Krycie zostaje wolne celowo: to jedyny
-    „zawór bezpieczeństwa” dla splatów bez gradientu.
+    zmian obrazu ruchem, nie przemalowaniem. Dolny pas: tania pętla na klatkę —
+    warm start sprawia, że optymalizator dopłaca tylko resztę przyspieszenia;
+    snapping i&nbsp;wygładzanie stabilizują długie sekwencje (szczegóły na
+    kolejnych slajdach). Krycie zostaje wolne celowo: to jedyny „zawór
+    bezpieczeństwa” dla splatów bez gradientu.
   </aside>
 </section>
