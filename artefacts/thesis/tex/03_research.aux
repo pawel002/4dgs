@@ -1,0 +1,340 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\@writefile{toc}{\contentsline {chapter}{\numberline {3}Research}{21}{chapter.3}\protected@file@percent }
+\@writefile{lof}{\addvspace {10\p@ }}
+\@writefile{lot}{\addvspace {10\p@ }}
+\@writefile{lol}{\addvspace {10\p@ }}
+\@writefile{loa}{\addvspace {10\p@ }}
+\newlabel{ch:research}{{3}{21}{Research}{chapter.3}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3.1}Problem Statement}{21}{section.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3.2}Method}{22}{section.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.1}High-Level Overview}{22}{subsection.3.2.1}\protected@file@percent }
+\newlabel{sec:overview}{{3.2.1}{22}{High-Level Overview}{subsection.3.2.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.1}{\ignorespaces End-to-end pipeline. Blender renders the imagery and exports exact poses. The static background is reconstructed once with \textsc  {splatfacto}. The dynamic foreground is segmented from the room by a model-free background subtraction and reconstructed per frame with \textsc  {temporal-splatfacto} (background subtraction $\to $ visual-hull seed $\to $ dense frame-0 fit $\to $ constrained per-frame tracking). The per-frame clouds and the background are recombined by the merge renderer, and the per-frame sequence is compressed in a temporal-frequency basis.}}{23}{figure.caption.17}\protected@file@percent }
+\newlabel{fig:pipeline}{{3.1}{23}{End-to-end pipeline. Blender renders the imagery and exports exact poses. The static background is reconstructed once with \textsc {splatfacto}. The dynamic foreground is segmented from the room by a model-free background subtraction and reconstructed per frame with \textsc {temporal-splatfacto} (background subtraction $\to $ visual-hull seed $\to $ dense frame-0 fit $\to $ constrained per-frame tracking). The per-frame clouds and the background are recombined by the merge renderer, and the per-frame sequence is compressed in a temporal-frequency basis}{figure.caption.17}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.2}Synthetic Data Generation}{23}{subsection.3.2.2}\protected@file@percent }
+\newlabel{sec:data}{{3.2.2}{23}{Synthetic Data Generation}{subsection.3.2.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.2}{\ignorespaces Overview of the synthetic room. The ceiling and the nearest wall are hidden to give an unobstructed view of the interior, its furniture, and the wall-mounted photographs used as dense visual features.}}{24}{figure.caption.18}\protected@file@percent }
+\newlabel{fig:room-layout}{{3.2}{24}{Overview of the synthetic room. The ceiling and the nearest wall are hidden to give an unobstructed view of the interior, its furniture, and the wall-mounted photographs used as dense visual features}{figure.caption.18}{}}
+\newlabel{eq:traj}{{3.1}{25}{Synthetic Data Generation}{equation.3.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.3}{\ignorespaces Top-down view of the dynamic-capture rig. Four fixed cameras (\texttt  {static1} to \texttt  {static4}) observe a moving subject from the room corners. The overlap of their view cones near the subject is the volume in which all four silhouettes agree, the region the reconstruction can constrain from every side, and the basis of the visual-hull seed of Section~\ref {sec:hull}.}}{26}{figure.caption.19}\protected@file@percent }
+\newlabel{fig:camera-rig}{{3.3}{26}{Top-down view of the dynamic-capture rig. Four fixed cameras (\texttt {static1} to \texttt {static4}) observe a moving subject from the room corners. The overlap of their view cones near the subject is the volume in which all four silhouettes agree, the region the reconstruction can constrain from every side, and the basis of the visual-hull seed of Section~\ref {sec:hull}}{figure.caption.19}{}}
+\newlabel{eq:c2w}{{3.2}{26}{Synthetic Data Generation}{equation.3.2}{}}
+\newlabel{eq:intrinsics}{{3.5}{27}{Synthetic Data Generation}{equation.3.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.4}{\ignorespaces Four representative ground-truth renders from the synthetic dataset, illustrating the variation in viewpoint, structural coverage, and lighting produced by the camera configurations.}}{28}{figure.caption.20}\protected@file@percent }
+\newlabel{fig:room-mosaic}{{3.4}{28}{Four representative ground-truth renders from the synthetic dataset, illustrating the variation in viewpoint, structural coverage, and lighting produced by the camera configurations}{figure.caption.20}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.5}{\ignorespaces Camera coordinate conventions. Blender (left) looks along local $-z$ with $y$ up. The OpenCV/SfM convention (right) looks along $+z$ with $y$ down. The two differ by $\mathbf  {R}_{\text  {flip}} = \mathrm  {diag}(1,-1,-1)$, reconciled once at load time.}}{28}{figure.caption.21}\protected@file@percent }
+\newlabel{fig:coord}{{3.5}{28}{Camera coordinate conventions. Blender (left) looks along local $-z$ with $y$ up. The OpenCV/SfM convention (right) looks along $+z$ with $y$ down. The two differ by $\mathbf {R}_{\text {flip}} = \mathrm {diag}(1,-1,-1)$, reconciled once at load time}{figure.caption.21}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.3}Static-Dynamic Scene Decomposition}{29}{subsection.3.2.3}\protected@file@percent }
+\newlabel{sec:decomposition}{{3.2.3}{29}{Static-Dynamic Scene Decomposition}{subsection.3.2.3}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.3.1}Model-Free Foreground Segmentation}{29}{subsubsection.3.2.3.1}\protected@file@percent }
+\newlabel{sec:bgsub}{{3.2.3.1}{29}{Model-Free Foreground Segmentation}{subsubsection.3.2.3.1}{}}
+\newlabel{eq:bgsub}{{3.9}{30}{Model-Free Foreground Segmentation}{equation.3.9}{}}
+\newlabel{eq:segmented}{{3.10}{30}{Model-Free Foreground Segmentation}{equation.3.10}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.6}{\ignorespaces Model-free foreground segmentation by background subtraction. Each fixed camera contributes an empty-room background plate (frame $0$), subtracting it from a later frame and thresholding the change magnitude (Eq.~\eqref  {eq:bgsub}) yields the subject's silhouette with no learned model. Everything outside the silhouette is set to black (Eq.~\eqref  {eq:segmented}), producing the on-black input the visual hull and the silhouette loss expect. The faint cast shadow that leaks into a single view is removed by the multi-view hull intersection.}}{30}{figure.caption.22}\protected@file@percent }
+\newlabel{fig:bgsub}{{3.6}{30}{Model-free foreground segmentation by background subtraction. Each fixed camera contributes an empty-room background plate (frame $0$), subtracting it from a later frame and thresholding the change magnitude (Eq.~\eqref {eq:bgsub}) yields the subject's silhouette with no learned model. Everything outside the silhouette is set to black (Eq.~\eqref {eq:segmented}), producing the on-black input the visual hull and the silhouette loss expect. The faint cast shadow that leaks into a single view is removed by the multi-view hull intersection}{figure.caption.22}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.3.2}Background Gradient and Filtering}{30}{subsubsection.3.2.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.3.3}Shadow-Aware Hysteresis Segmentation}{31}{subsubsection.3.2.3.3}\protected@file@percent }
+\newlabel{sec:hysteresis}{{3.2.3.3}{31}{Shadow-Aware Hysteresis Segmentation}{subsubsection.3.2.3.3}{}}
+\newlabel{eq:shadowlike}{{3.11}{31}{Shadow-Aware Hysteresis Segmentation}{equation.3.11}{}}
+\newlabel{eq:weakband}{{3.13}{31}{Shadow-Aware Hysteresis Segmentation}{equation.3.13}{}}
+\newlabel{eq:geodesic}{{3.14}{31}{Shadow-Aware Hysteresis Segmentation}{equation.3.14}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.7}{\ignorespaces Shadow-aware hysteresis segmentation. (a)~Two thresholds split the change magnitude into a rejected band, a conditionally kept weak band, and an unconditionally kept strong band. (b)~A weak region is admitted only if it is not shadow-like (Eq.~\eqref  {eq:shadowlike}) and geodesically connected to strong evidence (Eq.~\eqref  {eq:geodesic}): the camouflaged lower body attaches to the detected torso and is kept, while the cast shadow is vetoed, disconnected, and dropped.}}{32}{figure.caption.23}\protected@file@percent }
+\newlabel{fig:hysteresis}{{3.7}{32}{Shadow-aware hysteresis segmentation. (a)~Two thresholds split the change magnitude into a rejected band, a conditionally kept weak band, and an unconditionally kept strong band. (b)~A weak region is admitted only if it is not shadow-like (Eq.~\eqref {eq:shadowlike}) and geodesically connected to strong evidence (Eq.~\eqref {eq:geodesic}): the camouflaged lower body attaches to the detected torso and is kept, while the cast shadow is vetoed, disconnected, and dropped}{figure.caption.23}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.3.4}Emergent Partition of the Primitives}{32}{subsubsection.3.2.3.4}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3.8}{\ignorespaces The emergent static-dynamic partition. A primitive on the static wall receives a near-zero expected positional gradient and stays put. A primitive on the moving subject receives a gradient aligned with $-\mathbf  {v}^{(i)}_t$ and migrates. The partition is a by-product of the optimization rather than an input to it.}}{33}{figure.caption.24}\protected@file@percent }
+\newlabel{fig:decomp}{{3.8}{33}{The emergent static-dynamic partition. A primitive on the static wall receives a near-zero expected positional gradient and stays put. A primitive on the moving subject receives a gradient aligned with $-\mathbf {v}^{(i)}_t$ and migrates. The partition is a by-product of the optimization rather than an input to it}{figure.caption.24}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.4}Reconstructing the Temporal Gaussian Field}{33}{subsection.3.2.4}\protected@file@percent }
+\newlabel{sec:temporal}{{3.2.4}{33}{Reconstructing the Temporal Gaussian Field}{subsection.3.2.4}{}}
+\newlabel{eq:frameofstep}{{3.17}{34}{Reconstructing the Temporal Gaussian Field}{equation.3.17}{}}
+\@writefile{loa}{\contentsline {algocf}{\numberline {1}{\ignorespaces Temporal Gaussian fitting (\textsc  {temporal-splatfacto}).}}{34}{algocf.1}\protected@file@percent }
+\newlabel{alg:temporal}{{1}{34}{Reconstructing the Temporal Gaussian Field}{algocf.1}{}}
+\newlabel{eq:ktotal}{{3.18}{35}{Reconstructing the Temporal Gaussian Field}{equation.3.18}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.9}{\ignorespaces The training schedule. Frame~$0$ receives a large budget $N_0$ with densification active. The primitive count is frozen at step $N_0$. Each subsequent frame receives $N_t$ tracking steps with the count and colour held constant. Every frame transition applies a velocity prediction followed by a frustum snap (Section~\ref {sec:velocity}).}}{35}{figure.caption.26}\protected@file@percent }
+\newlabel{fig:schedule}{{3.9}{35}{The training schedule. Frame~$0$ receives a large budget $N_0$ with densification active. The primitive count is frozen at step $N_0$. Each subsequent frame receives $N_t$ tracking steps with the count and colour held constant. Every frame transition applies a velocity prediction followed by a frustum snap (Section~\ref {sec:velocity})}{figure.caption.26}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.4.1}Visual-Hull Initialization}{35}{subsubsection.3.2.4.1}\protected@file@percent }
+\newlabel{sec:hull}{{3.2.4.1}{35}{Visual-Hull Initialization}{subsubsection.3.2.4.1}{}}
+\@writefile{loa}{\contentsline {algocf}{\numberline {2}{\ignorespaces Visual-hull carving (\textsc  {CarveVisualHull}).}}{36}{algocf.2}\protected@file@percent }
+\newlabel{alg:carve}{{2}{36}{Visual-Hull Initialization}{algocf.2}{}}
+\newlabel{eq:hull}{{3.20}{36}{Visual-Hull Initialization}{equation.3.20}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.4.2}Dense Reconstruction of Frame 0}{36}{subsubsection.3.2.4.2}\protected@file@percent }
+\newlabel{sec:frame0}{{3.2.4.2}{36}{Dense Reconstruction of Frame 0}{subsubsection.3.2.4.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.10}{\ignorespaces Visual-hull carving (shown in 2D for three cameras). Each camera contributes a silhouette cone. The carved hull is their intersection, a tight superset of the object. The translucent overlap darkens toward the centre, where all cones agree.}}{37}{figure.caption.28}\protected@file@percent }
+\newlabel{fig:visual-hull}{{3.10}{37}{Visual-hull carving (shown in 2D for three cameras). Each camera contributes a silhouette cone. The carved hull is their intersection, a tight superset of the object. The translucent overlap darkens toward the centre, where all cones agree}{figure.caption.28}{}}
+\newlabel{eq:photo}{{3.21}{37}{Dense Reconstruction of Frame 0}{equation.3.21}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.4.3}Tracking Frames}{37}{subsubsection.3.2.4.3}\protected@file@percent }
+\newlabel{sec:tracking}{{3.2.4.3}{37}{Tracking Frames}{subsubsection.3.2.4.3}{}}
+\newlabel{eq:trackparams}{{3.22}{38}{Tracking Frames}{equation.3.22}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.4.4}Foreground Masking and Silhouette Supervision}{39}{subsubsection.3.2.4.4}\protected@file@percent }
+\newlabel{sec:masking}{{3.2.4.4}{39}{Foreground Masking and Silhouette Supervision}{subsubsection.3.2.4.4}{}}
+\newlabel{eq:sil}{{3.24}{39}{Foreground Masking and Silhouette Supervision}{equation.3.24}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.4.5}Temporal Attribute Smoothness}{40}{subsubsection.3.2.4.5}\protected@file@percent }
+\newlabel{sec:smoothness}{{3.2.4.5}{40}{Temporal Attribute Smoothness}{subsubsection.3.2.4.5}{}}
+\newlabel{eq:smooth}{{3.25}{40}{Temporal Attribute Smoothness}{equation.3.25}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.5}Point-Cloud Velocity and Frustum Clamping}{40}{subsection.3.2.5}\protected@file@percent }
+\newlabel{sec:velocity}{{3.2.5}{40}{Point-Cloud Velocity and Frustum Clamping}{subsection.3.2.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.11}{\ignorespaces The temporal smoothness prior. (a)~With the non-positional attributes unconstrained, their converged per-frame values fluctuate around the true slow evolution, optimizer noise that flickers in playback and defeats truncation in the temporal-frequency basis. (b)~An L2 anchor to the previous frame's converged value damps the fluctuation at the source while letting genuine slow changes through.}}{41}{figure.caption.29}\protected@file@percent }
+\newlabel{fig:smoothness-tikz}{{3.11}{41}{The temporal smoothness prior. (a)~With the non-positional attributes unconstrained, their converged per-frame values fluctuate around the true slow evolution, optimizer noise that flickers in playback and defeats truncation in the temporal-frequency basis. (b)~An L2 anchor to the previous frame's converged value damps the fluctuation at the source while letting genuine slow changes through}{figure.caption.29}{}}
+\newlabel{eq:velocity}{{3.27}{41}{Point-Cloud Velocity and Frustum Clamping}{equation.3.27}{}}
+\newlabel{eq:accel}{{3.28}{41}{Point-Cloud Velocity and Frustum Clamping}{equation.3.28}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.12}{\ignorespaces (a) Linear velocity prediction extrapolates the last displacement to warm-start the next frame. The optimizer then absorbs only the acceleration residual to reach the true position $\boldsymbol  {\mu }^{\star }_t$. (b) A primitive predicted outside the silhouette intersection is snapped onto the nearest hull-surface voxel, reclaiming it instead of letting it coast away.}}{42}{figure.caption.30}\protected@file@percent }
+\newlabel{fig:velocity-snap}{{3.12}{42}{(a) Linear velocity prediction extrapolates the last displacement to warm-start the next frame. The optimizer then absorbs only the acceleration residual to reach the true position $\boldsymbol {\mu }^{\star }_t$. (b) A primitive predicted outside the silhouette intersection is snapped onto the nearest hull-surface voxel, reclaiming it instead of letting it coast away}{figure.caption.30}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.5.1}Per-Frame Hull Snapping}{42}{subsubsection.3.2.5.1}\protected@file@percent }
+\newlabel{eq:snap}{{3.29}{42}{Per-Frame Hull Snapping}{equation.3.29}{}}
+\@writefile{loa}{\contentsline {algocf}{\numberline {3}{\ignorespaces Per-frame hull snapping (\textsc  {SnapStraysToHull}).}}{43}{algocf.3}\protected@file@percent }
+\newlabel{alg:snap}{{3}{43}{Per-Frame Hull Snapping}{algocf.3}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.5.2}Distance-Field Clamping}{43}{subsubsection.3.2.5.2}\protected@file@percent }
+\newlabel{sec:snapmargin}{{3.2.5.2}{43}{Distance-Field Clamping}{subsubsection.3.2.5.2}{}}
+\newlabel{eq:snapmargin}{{3.30}{43}{Distance-Field Clamping}{equation.3.30}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.13}{\ignorespaces Distance-field clamping. The carved hull is surrounded by a margin shell of $\delta $ voxels. A primitive flagged by the projective stray test but lying within the shell is borderline (mask noise) and is left to the optimizer. Only primitives beyond the shell are snapped onto the hull surface.}}{44}{figure.caption.32}\protected@file@percent }
+\newlabel{fig:snap-margin-tikz}{{3.13}{44}{Distance-field clamping. The carved hull is surrounded by a margin shell of $\delta $ voxels. A primitive flagged by the projective stray test but lying within the shell is borderline (mask noise) and is left to the optimizer. Only primitives beyond the shell are snapped onto the hull surface}{figure.caption.32}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.6}Temporal Compression}{44}{subsection.3.2.6}\protected@file@percent }
+\newlabel{sec:compression}{{3.2.6}{44}{Temporal Compression}{subsection.3.2.6}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.14}{\ignorespaces Temporal compression of one attribute. The per-primitive time series is transformed by the DCT, only the lowest $K$ coefficients are retained (chosen adaptively per attribute), and the inverse transform reconstructs a smooth low-pass fit. Identically-zero and constant-in-time attributes are detected and stored trivially.}}{45}{figure.caption.33}\protected@file@percent }
+\newlabel{fig:compression}{{3.14}{45}{Temporal compression of one attribute. The per-primitive time series is transformed by the DCT, only the lowest $K$ coefficients are retained (chosen adaptively per attribute), and the inverse transform reconstructs a smooth low-pass fit. Identically-zero and constant-in-time attributes are detected and stored trivially}{figure.caption.33}{}}
+\newlabel{eq:dct}{{3.31}{45}{Temporal Compression}{equation.3.31}{}}
+\newlabel{eq:choosek}{{3.32}{45}{Temporal Compression}{equation.3.32}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2.7}The Merge Rendering Pipeline}{46}{subsection.3.2.7}\protected@file@percent }
+\newlabel{sec:merge}{{3.2.7}{46}{The Merge Rendering Pipeline}{subsection.3.2.7}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {3.3}Results and Discussion}{47}{section.3.3}\protected@file@percent }
+\newlabel{sec:results}{{3.3}{47}{Results and Discussion}{section.3.3}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.1}Evaluation Protocol}{47}{subsection.3.3.1}\protected@file@percent }
+\newlabel{sec:results-protocol}{{3.3.1}{47}{Evaluation Protocol}{subsection.3.3.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.15}{\ignorespaces Browser GUI temporal rendering engine implemented using \emph  {viser}. On the upper right corner controls can be seen, which allow the user to play through the entire animation with a given framerate. }}{47}{figure.caption.34}\protected@file@percent }
+\newlabel{fig:viser-gui}{{3.15}{47}{Browser GUI temporal rendering engine implemented using \emph {viser}. On the upper right corner controls can be seen, which allow the user to play through the entire animation with a given framerate}{figure.caption.34}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.2}Model-Free Background Subtraction}{49}{subsection.3.3.2}\protected@file@percent }
+\newlabel{sec:results-bgsub}{{3.3.2}{49}{Model-Free Background Subtraction}{subsection.3.3.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.16}{\ignorespaces Model-free segmentation on one view (camera \texttt  {static2}, frame 75). From left, the input frame, the empty-room plate, their per-pixel change magnitude $d_{c,t}$, extracted silhouette(mask), segmented image and a ground truth (with a light error).}}{49}{figure.caption.35}\protected@file@percent }
+\newlabel{fig:bgsub-montage}{{3.16}{49}{Model-free segmentation on one view (camera \texttt {static2}, frame 75). From left, the input frame, the empty-room plate, their per-pixel change magnitude $d_{c,t}$, extracted silhouette(mask), segmented image and a ground truth (with a light error)}{figure.caption.35}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.17}{\ignorespaces Segmentation accuracy against the ground-truth silhouettes. (a)~Threshold sweep. precision falls at low $\tau _s$ (shadow and indirect-light leak), recall falls at high $\tau _s$ (low-contrast subject regions). (b)~Erosion sweep at the chosen threshold, where each final $3\times 3$ erosion step raises precision monotonically, the direct cure for an oversized mask, at a growing cost in recall. Two steps are adopted as the default. (c)~Per-frame IoU of each camera at the chosen setting.}}{50}{figure.caption.36}\protected@file@percent }
+\newlabel{fig:bgsub-quality}{{3.17}{50}{Segmentation accuracy against the ground-truth silhouettes. (a)~Threshold sweep. precision falls at low $\tau _s$ (shadow and indirect-light leak), recall falls at high $\tau _s$ (low-contrast subject regions). (b)~Erosion sweep at the chosen threshold, where each final $3\times 3$ erosion step raises precision monotonically, the direct cure for an oversized mask, at a growing cost in recall. Two steps are adopted as the default. (c)~Per-frame IoU of each camera at the chosen setting}{figure.caption.36}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.2.1}Shadow-Aware Hysteresis}{51}{subsubsection.3.3.2.1}\protected@file@percent }
+\newlabel{sec:results-hysteresis}{{3.3.2.1}{51}{Shadow-Aware Hysteresis}{subsubsection.3.3.2.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.18}{\ignorespaces The camouflage failure and its sweep-guided repair, at reconstruction frame $0$ (camera \texttt  {static1}). With the original setting ($\tau _s = 0.1$, no erosion) the subject's colours match the rug, the silhouette develops holes, and the reconstruction inherits a fragmented lower body. The tuned setting ($\tau _s = 0.06$, two erosions) recovers most of the silhouette and the reconstructed subject is correspondingly more complete.}}{51}{figure.caption.37}\protected@file@percent }
+\newlabel{fig:bgsub-fix}{{3.18}{51}{The camouflage failure and its sweep-guided repair, at reconstruction frame $0$ (camera \texttt {static1}). With the original setting ($\tau _s = 0.1$, no erosion) the subject's colours match the rug, the silhouette develops holes, and the reconstruction inherits a fragmented lower body. The tuned setting ($\tau _s = 0.06$, two erosions) recovers most of the silhouette and the reconstructed subject is correspondingly more complete}{figure.caption.37}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.19}{\ignorespaces Segmentation variants against the ground-truth silhouettes. (a)~Mask quality of the production single threshold, the max-channel difference, and the hysteresis mechanism with its two ablations. Without the shadow veto the weak band floods through the contact shadow (precision $0.37$). Without connectivity the veto alone leaves isolated bounce-light islands. (b)~Per-frame IoU, where the single threshold dips wherever the subject camouflages (the shaded window is the rug), while the shadow-aware hysteresis stays at ${\sim }0.96$ throughout.}}{52}{figure.caption.38}\protected@file@percent }
+\newlabel{fig:seg-variants}{{3.19}{52}{Segmentation variants against the ground-truth silhouettes. (a)~Mask quality of the production single threshold, the max-channel difference, and the hysteresis mechanism with its two ablations. Without the shadow veto the weak band floods through the contact shadow (precision $0.37$). Without connectivity the veto alone leaves isolated bounce-light islands. (b)~Per-frame IoU, where the single threshold dips wherever the subject camouflages (the shaded window is the rug), while the shadow-aware hysteresis stays at ${\sim }0.96$ throughout}{figure.caption.38}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.3}Visual-Hull Initialization}{52}{subsection.3.3.3}\protected@file@percent }
+\newlabel{sec:results-hull}{{3.3.3}{52}{Visual-Hull Initialization}{subsection.3.3.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.20}{\ignorespaces The camouflage frame (camera \texttt  {static1}, frame 3) under both segmenters. The amplified change magnitude (second panel) shows the weak but nonzero evidence over the rug-camouflaged lower body. The single threshold fragments it, the shadow-aware hysteresis recovers a silhouette visually indistinguishable from the ground truth.}}{53}{figure.caption.39}\protected@file@percent }
+\newlabel{fig:seg-montage}{{3.20}{53}{The camouflage frame (camera \texttt {static1}, frame 3) under both segmenters. The amplified change magnitude (second panel) shows the weak but nonzero evidence over the rug-camouflaged lower body. The single threshold fragments it, the shadow-aware hysteresis recovers a silhouette visually indistinguishable from the ground truth}{figure.caption.39}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.21}{\ignorespaces Frame-0 reconstruction from three initializations under identical losses. (a)~The hull seed converges fastest. An equal-budget random cloud collapses, its off-object primitives faded by the silhouette term and pruned. A $30\times $ larger random budget converges more slowly to a slightly higher final value. The periodic dips are \textsc  {splatfacto}'s scheduled opacity resets during densification. (b)~Surviving primitive counts (log scale). The $50$k random start pays a ${\sim }3.5\times $ larger cloud for its $+3.4$\,dB.}}{53}{figure.caption.40}\protected@file@percent }
+\newlabel{fig:hull-init}{{3.21}{53}{Frame-0 reconstruction from three initializations under identical losses. (a)~The hull seed converges fastest. An equal-budget random cloud collapses, its off-object primitives faded by the silhouette term and pruned. A $30\times $ larger random budget converges more slowly to a slightly higher final value. The periodic dips are \textsc {splatfacto}'s scheduled opacity resets during densification. (b)~Surviving primitive counts (log scale). The $50$k random start pays a ${\sim }3.5\times $ larger cloud for its $+3.4$\,dB}{figure.caption.40}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.22}{\ignorespaces Effect of the velocity warm start, measured per frame on a 40-frame tracking sequence from an identical frame-0 state (improved pipeline, with hysteresis silhouettes and margin clamping active in both arms). (a)~Steps needed to reach a fixed $20$\,dB object-PSNR target, with means of $23$ vs.\ $145$ steps ($84\%$ fewer). (b)~Quality reached at a PSNR plateau, where the warm-started fit converges about $5.9$\,dB higher, because a cold start must re-traverse the full inter-frame motion each frame and tends to stall early.}}{54}{figure.caption.41}\protected@file@percent }
+\newlabel{fig:velocity-conv}{{3.22}{54}{Effect of the velocity warm start, measured per frame on a 40-frame tracking sequence from an identical frame-0 state (improved pipeline, with hysteresis silhouettes and margin clamping active in both arms). (a)~Steps needed to reach a fixed $20$\,dB object-PSNR target, with means of $23$ vs.\ $145$ steps ($84\%$ fewer). (b)~Quality reached at a PSNR plateau, where the warm-started fit converges about $5.9$\,dB higher, because a cold start must re-traverse the full inter-frame motion each frame and tends to stall early}{figure.caption.41}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.4}Velocity Prediction and Convergence}{55}{subsection.3.3.4}\protected@file@percent }
+\newlabel{sec:results-velocity}{{3.3.4}{55}{Velocity Prediction and Convergence}{subsection.3.3.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.5}Frustum Clamping}{55}{subsection.3.3.5}\protected@file@percent }
+\newlabel{sec:results-snap}{{3.3.5}{55}{Frustum Clamping}{subsection.3.3.5}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3.1}{\ignorespaces Frustum clamping over the full 150-frame sequence (means over frames; extent at the last frame). PSNR is ceiling-limited and nearly blind to the failures. The extent exposes the runaway, the leak exposes the parked strays that gating accumulates near the subject, and SSIM exposes the structural cost of losing primitives.}}{55}{table.caption.42}\protected@file@percent }
+\newlabel{tab:snap}{{3.1}{55}{Frustum clamping over the full 150-frame sequence (means over frames; extent at the last frame). PSNR is ceiling-limited and nearly blind to the failures. The extent exposes the runaway, the leak exposes the parked strays that gating accumulates near the subject, and SSIM exposes the structural cost of losing primitives}{table.caption.42}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.23}{\ignorespaces Per-frame behaviour of the three clamping variants over 150 frames. (a)~Object SSIM, where snapping holds the highest structural quality throughout. (b)~Cloud extent, where without any mechanism the furthest primitive coasts away linearly, the runaway signature. Both mechanisms bound it. (c)~Background leak (log scale), where gating is worst, its parked strays accumulating as a haze near the subject, while snapping reclaims them.}}{56}{figure.caption.43}\protected@file@percent }
+\newlabel{fig:snap-curves}{{3.23}{56}{Per-frame behaviour of the three clamping variants over 150 frames. (a)~Object SSIM, where snapping holds the highest structural quality throughout. (b)~Cloud extent, where without any mechanism the furthest primitive coasts away linearly, the runaway signature. Both mechanisms bound it. (c)~Background leak (log scale), where gating is worst, its parked strays accumulating as a haze near the subject, while snapping reclaims them}{figure.caption.43}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.5.1}Distance-Field Clamping and Its Interaction with the Masks}{57}{subsubsection.3.3.5.1}\protected@file@percent }
+\newlabel{sec:results-snapmargin}{{3.3.5.1}{57}{Distance-Field Clamping and Its Interaction with the Masks}{subsubsection.3.3.5.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.24}{\ignorespaces The distance-field margin and the segmentation quality interact. (a)~Primitives flagged by the strict projective test per frame. With noisy masks (margin only) the test nominates ${\sim }75\%$ of the cloud. Hysteresis masks without the margin still oscillate in a snap-lag-snap feedback. The combination settles near a fifth of the cloud. (b)~Teleports actually applied (log scale), where the margin dismisses the borderline majority, leaving an order of magnitude fewer interventions.}}{57}{figure.caption.44}\protected@file@percent }
+\newlabel{fig:snap-margin-results}{{3.24}{57}{The distance-field margin and the segmentation quality interact. (a)~Primitives flagged by the strict projective test per frame. With noisy masks (margin only) the test nominates ${\sim }75\%$ of the cloud. Hysteresis masks without the margin still oscillate in a snap-lag-snap feedback. The combination settles near a fifth of the cloud. (b)~Teleports actually applied (log scale), where the margin dismisses the borderline majority, leaving an order of magnitude fewer interventions}{figure.caption.44}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.25}{\ignorespaces Background drift over 150 frames. (a)~Leaked opacity (log scale), where under the naive loss the background fills monotonically to near-total opacity. Frozen opacity strands strays an order of magnitude above the default, whose leak stays flat at the $10^{-3}$ level. (b)~Core coverage is blind to the failure, the naive arm covers the core trivially by painting everything.}}{58}{figure.caption.46}\protected@file@percent }
+\newlabel{fig:masking-curves}{{3.25}{58}{Background drift over 150 frames. (a)~Leaked opacity (log scale), where under the naive loss the background fills monotonically to near-total opacity. Frozen opacity strands strays an order of magnitude above the default, whose leak stays flat at the $10^{-3}$ level. (b)~Core coverage is blind to the failure, the naive arm covers the core trivially by painting everything}{figure.caption.46}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.6}Foreground Masking and Silhouette Supervision}{58}{subsection.3.3.6}\protected@file@percent }
+\newlabel{sec:results-masking}{{3.3.6}{58}{Foreground Masking and Silhouette Supervision}{subsection.3.3.6}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3.2}{\ignorespaces Loss-design ablation over the full 150-frame sequence (means over frames). The full-image loss converts the model into an opaque background painting (leak $\to 0.99$). Freezing opacity strands bright primitives off-object and destroys structural quality.}}{58}{table.caption.45}\protected@file@percent }
+\newlabel{tab:masking}{{3.2}{58}{Loss-design ablation over the full 150-frame sequence (means over frames). The full-image loss converts the model into an opaque background painting (leak $\to 0.99$). Freezing opacity strands bright primitives off-object and destroys structural quality}{table.caption.45}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.7}Frozen Colour}{59}{subsection.3.3.7}\protected@file@percent }
+\newlabel{sec:results-colour}{{3.3.7}{59}{Frozen Colour}{subsection.3.3.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.8}Temporal Attribute Smoothness}{59}{subsection.3.3.8}\protected@file@percent }
+\newlabel{sec:results-smoothness}{{3.3.8}{59}{Temporal Attribute Smoothness}{subsection.3.3.8}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.26}{\ignorespaces Colour freezing over 150 frames. (a)~With colours trainable, appearance drifts monotonically away from frame~0. Frozen colours are bit-identical by construction. (b)~The drift buys no quality, since the per-frame object PSNR of the two arms is statistically indistinguishable.}}{60}{figure.caption.47}\protected@file@percent }
+\newlabel{fig:freecolors}{{3.26}{60}{Colour freezing over 150 frames. (a)~With colours trainable, appearance drifts monotonically away from frame~0. Frozen colours are bit-identical by construction. (b)~The drift buys no quality, since the per-frame object PSNR of the two arms is statistically indistinguishable}{figure.caption.47}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.9}Full-Sequence Quality and Cost}{60}{subsection.3.3.9}\protected@file@percent }
+\newlabel{sec:results-full}{{3.3.9}{60}{Full-Sequence Quality and Cost}{subsection.3.3.9}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.9.1}Quality Over the Capture}{60}{subsubsection.3.3.9.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3.27}{\ignorespaces The temporal smoothness prior. (a)~Frame-to-frame attribute fluctuation on the full sequence, where the anchored channels drop by up to two orders of magnitude, the exempt positions are untouched. (b)~The pilot sweep, where jitter suppression is already saturated at $\lambda _{\text  {s}} = 0.3$ while the SSIM cost keeps growing, so the smallest weight is chosen. (c)~The compression rate-distortion front of the full run shifts outward, reaching $43.5\times $ at the default knob vs.\ $27.8\times $ for the baseline, at matched-or-better render fidelity.}}{61}{figure.caption.48}\protected@file@percent }
+\newlabel{fig:smoothness-results}{{3.27}{61}{The temporal smoothness prior. (a)~Frame-to-frame attribute fluctuation on the full sequence, where the anchored channels drop by up to two orders of magnitude, the exempt positions are untouched. (b)~The pilot sweep, where jitter suppression is already saturated at $\lambda _{\text {s}} = 0.3$ while the SSIM cost keeps growing, so the smallest weight is chosen. (c)~The compression rate-distortion front of the full run shifts outward, reaching $43.5\times $ at the default knob vs.\ $27.8\times $ for the baseline, at matched-or-better render fidelity}{figure.caption.48}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.9.2}Trajectories and the Emergent Motion Structure}{61}{subsubsection.3.3.9.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3.28}{\ignorespaces The full-resolution 150-frame reconstruction. (a)~Per-frame object PSNR against the ground truth, with the segmented-input reference (dashed), where the reconstruction rides above the fidelity of its own inputs on $149$ of $150$ frames, and the common shape of both curves is the illumination gap, not tracking error. (b)~Object SSIM and core coverage are flat across the capture. Nothing degrades with sequence length.}}{62}{figure.caption.49}\protected@file@percent }
+\newlabel{fig:full-sequence}{{3.28}{62}{The full-resolution 150-frame reconstruction. (a)~Per-frame object PSNR against the ground truth, with the segmented-input reference (dashed), where the reconstruction rides above the fidelity of its own inputs on $149$ of $150$ frames, and the common shape of both curves is the illumination gap, not tracking error. (b)~Object SSIM and core coverage are flat across the capture. Nothing degrades with sequence length}{figure.caption.49}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.9.3}The Composited Scene}{62}{subsubsection.3.3.9.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3.29}{\ignorespaces Ground truth (top) and reconstruction (bottom) at six instants spanning the 150-frame capture, from camera \texttt  {static1}. The same fixed set of primitives, frozen in count and colour, tracks the walk end to end. The residual speckle at $t = 0$ is inherited from the remaining silhouette holes where the subject camouflages against the rug (Section~\ref {sec:results-bgsub}) and closes as the subject moves onto the neutral floor.}}{63}{figure.caption.50}\protected@file@percent }
+\newlabel{fig:qual-temporal}{{3.29}{63}{Ground truth (top) and reconstruction (bottom) at six instants spanning the 150-frame capture, from camera \texttt {static1}. The same fixed set of primitives, frozen in count and colour, tracks the walk end to end. The residual speckle at $t = 0$ is inherited from the remaining silhouette holes where the subject camouflages against the rug (Section~\ref {sec:results-bgsub}) and closes as the subject moves onto the neutral floor}{figure.caption.50}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.3.9.4}Cost}{63}{subsubsection.3.3.9.4}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3.30}{\ignorespaces The reconstruction as a field of trajectories. (a)~Paths of 400 randomly sampled primitives through the capture (colour = time). The body's vertical structure is preserved along the walk, so a primitive keeps denoting the same physical feature. (b)~Cumulative displacement across all $11\,561$ primitives, forming a tight, unimodal distribution, the signature of a cloud that moves as one coherent body.}}{64}{figure.caption.51}\protected@file@percent }
+\newlabel{fig:trajectories}{{3.30}{64}{The reconstruction as a field of trajectories. (a)~Paths of 400 randomly sampled primitives through the capture (colour = time). The body's vertical structure is preserved along the walk, so a primitive keeps denoting the same physical feature. (b)~Cumulative displacement across all $11\,561$ primitives, forming a tight, unimodal distribution, the signature of a cloud that moves as one coherent body}{figure.caption.51}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.31}{\ignorespaces The recombined scene. Top, the raw capture from camera \texttt  {static2} (never segmented, shown for reference). Bottom, the merge renderer's composite of the static background reconstruction (a novel view for it) with the per-frame dynamic foreground at three instants.}}{64}{figure.caption.52}\protected@file@percent }
+\newlabel{fig:qual-merge}{{3.31}{64}{The recombined scene. Top, the raw capture from camera \texttt {static2} (never segmented, shown for reference). Bottom, the merge renderer's composite of the static background reconstruction (a novel view for it) with the per-frame dynamic foreground at three instants}{figure.caption.52}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.10}Temporal Compression}{65}{subsection.3.3.10}\protected@file@percent }
+\newlabel{sec:results-compression}{{3.3.10}{65}{Temporal Compression}{subsection.3.3.10}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3.3}{\ignorespaces Rate-distortion sweep of the temporal compressor on the full 150-frame, $11\,561$-primitive sequence ($430$\,MB raw).}}{65}{table.caption.53}\protected@file@percent }
+\newlabel{tab:compression}{{3.3}{65}{Rate-distortion sweep of the temporal compressor on the full 150-frame, $11\,561$-primitive sequence ($430$\,MB raw)}{table.caption.53}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.11}The Improved Pipeline End to End}{65}{subsection.3.3.11}\protected@file@percent }
+\newlabel{sec:results-improved}{{3.3.11}{65}{The Improved Pipeline End to End}{subsection.3.3.11}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.32}{\ignorespaces Temporal compression of the full sequence. (a)~Rate-distortion front swept by the single quality knob $q$. The default operating point is marked. (b)~Retained DCT coefficients per time-varying attribute at the default $q$, where the smooth positions need a small fraction of the 150 coefficients, while the noisy opacity, scale, and rotation channels hit the cap. All colour attributes are stored losslessly by the constant mode and the normals by the zero mode, so neither appears in the budget.}}{66}{figure.caption.54}\protected@file@percent }
+\newlabel{fig:rate-distortion}{{3.32}{66}{Temporal compression of the full sequence. (a)~Rate-distortion front swept by the single quality knob $q$. The default operating point is marked. (b)~Retained DCT coefficients per time-varying attribute at the default $q$, where the smooth positions need a small fraction of the 150 coefficients, while the noisy opacity, scale, and rotation channels hit the cap. All colour attributes are stored losslessly by the constant mode and the normals by the zero mode, so neither appears in the budget}{figure.caption.54}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3.4}{\ignorespaces The improvement mechanisms, alone and combined, over the full 150-frame sequence (means over frames; extent at the last frame). PSNR stays inside the illumination-gap band throughout and does not discriminate. Note the interactions. The snap margin alone hurts (its gentleness exposes the mask noise the blunt clamp was compensating for), and the smoothness prior alone costs structure, yet the combination is the best configuration measured. The primitive count is set by frame-0 densification and varies with the mask fullness and run stochasticity.}}{66}{table.caption.55}\protected@file@percent }
+\newlabel{tab:improved}{{3.4}{66}{The improvement mechanisms, alone and combined, over the full 150-frame sequence (means over frames; extent at the last frame). PSNR stays inside the illumination-gap band throughout and does not discriminate. Note the interactions. The snap margin alone hurts (its gentleness exposes the mask noise the blunt clamp was compensating for), and the smoothness prior alone costs structure, yet the combination is the best configuration measured. The primitive count is set by frame-0 densification and varies with the mask fullness and run stochasticity}{table.caption.55}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.33}{\ignorespaces The improved pipeline against the v2 baseline, per frame. (a)~Object PSNR: both arms ride the illumination-gap envelope of the input reference. The improved arm's cleaner masks admit slightly less bounce light mid-sequence. (b)~Object SSIM, where the improved arm is markedly more stable, winning precisely in the camouflage window (early frames) and the stray-accumulation regime (late frames) that the baseline's mechanisms mishandled.}}{67}{figure.caption.56}\protected@file@percent }
+\newlabel{fig:improved-summary}{{3.33}{67}{The improved pipeline against the v2 baseline, per frame. (a)~Object PSNR: both arms ride the illumination-gap envelope of the input reference. The improved arm's cleaner masks admit slightly less bounce light mid-sequence. (b)~Object SSIM, where the improved arm is markedly more stable, winning precisely in the camouflage window (early frames) and the stray-accumulation regime (late frames) that the baseline's mechanisms mishandled}{figure.caption.56}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.12}Iteration Budget}{67}{subsection.3.3.12}\protected@file@percent }
+\newlabel{sec:results-budget}{{3.3.12}{67}{Iteration Budget}{subsection.3.3.12}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3.5}{\ignorespaces Iteration-budget sweep of the improved pipeline (150 frames, full resolution, single GPU). Quality is flat across a ${9.3\times }$ range of wall-clock, so the generous budget was headroom, not necessity.}}{68}{table.caption.57}\protected@file@percent }
+\newlabel{tab:budget}{{3.5}{68}{Iteration-budget sweep of the improved pipeline (150 frames, full resolution, single GPU). Quality is flat across a ${9.3\times }$ range of wall-clock, so the generous budget was headroom, not necessity}{table.caption.57}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.13}Scope of the Evaluation and Dataset Requirements}{68}{subsection.3.3.13}\protected@file@percent }
+\newlabel{sec:results-dataset-scope}{{3.3.13}{68}{Scope of the Evaluation and Dataset Requirements}{subsection.3.3.13}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3.34}{\ignorespaces Choosing the iteration budget. (a)~Frame-0 convergence under the hysteresis masks: the fit is essentially converged by $3000$ to $5000$ steps. The spikes are scheduled opacity resets. (b)~End-to-end quality against wall-clock for the four budgets, where the curve is flat, so the cheapest point ($3000/300$, under eight minutes for the full capture) is adopted.}}{69}{figure.caption.58}\protected@file@percent }
+\newlabel{fig:budget}{{3.34}{69}{Choosing the iteration budget. (a)~Frame-0 convergence under the hysteresis masks: the fit is essentially converged by $3000$ to $5000$ steps. The spikes are scheduled opacity resets. (b)~End-to-end quality against wall-clock for the four budgets, where the curve is flat, so the cheapest point ($3000/300$, under eight minutes for the full capture) is adopted}{figure.caption.58}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3.14}Summary}{70}{subsection.3.3.14}\protected@file@percent }
+\newlabel{sec:results-summary}{{3.3.14}{70}{Summary}{subsection.3.3.14}{}}
+\@setckpt{tex/03_research}{
+\setcounter{page}{72}
+\setcounter{equation}{32}
+\setcounter{enumi}{3}
+\setcounter{enumii}{0}
+\setcounter{enumiii}{0}
+\setcounter{enumiv}{0}
+\setcounter{footnote}{0}
+\setcounter{mpfootnote}{0}
+\setcounter{part}{0}
+\setcounter{chapter}{3}
+\setcounter{section}{3}
+\setcounter{subsection}{14}
+\setcounter{subsubsection}{0}
+\setcounter{paragraph}{0}
+\setcounter{subparagraph}{0}
+\setcounter{figure}{34}
+\setcounter{table}{5}
+\setcounter{tabx@nest}{0}
+\setcounter{listtotal}{0}
+\setcounter{listcount}{0}
+\setcounter{liststart}{0}
+\setcounter{liststop}{0}
+\setcounter{citecount}{0}
+\setcounter{citetotal}{0}
+\setcounter{multicitecount}{0}
+\setcounter{multicitetotal}{0}
+\setcounter{instcount}{31}
+\setcounter{maxnames}{3}
+\setcounter{minnames}{1}
+\setcounter{maxitems}{3}
+\setcounter{minitems}{1}
+\setcounter{citecounter}{0}
+\setcounter{maxcitecounter}{0}
+\setcounter{savedcitecounter}{0}
+\setcounter{uniquelist}{0}
+\setcounter{uniquename}{0}
+\setcounter{refsection}{0}
+\setcounter{refsegment}{0}
+\setcounter{maxextratitle}{0}
+\setcounter{maxextratitleyear}{0}
+\setcounter{maxextraname}{0}
+\setcounter{maxextradate}{0}
+\setcounter{maxextraalpha}{0}
+\setcounter{abbrvpenalty}{50}
+\setcounter{highnamepenalty}{50}
+\setcounter{lownamepenalty}{25}
+\setcounter{maxparens}{3}
+\setcounter{parenlevel}{0}
+\setcounter{blx@maxsection}{0}
+\setcounter{mincomprange}{10}
+\setcounter{maxcomprange}{100000}
+\setcounter{mincompwidth}{1}
+\setcounter{afterword}{0}
+\setcounter{savedafterword}{0}
+\setcounter{annotator}{0}
+\setcounter{savedannotator}{0}
+\setcounter{author}{0}
+\setcounter{savedauthor}{0}
+\setcounter{bookauthor}{0}
+\setcounter{savedbookauthor}{0}
+\setcounter{commentator}{0}
+\setcounter{savedcommentator}{0}
+\setcounter{editor}{0}
+\setcounter{savededitor}{0}
+\setcounter{editora}{0}
+\setcounter{savededitora}{0}
+\setcounter{editorb}{0}
+\setcounter{savededitorb}{0}
+\setcounter{editorc}{0}
+\setcounter{savededitorc}{0}
+\setcounter{foreword}{0}
+\setcounter{savedforeword}{0}
+\setcounter{holder}{0}
+\setcounter{savedholder}{0}
+\setcounter{introduction}{0}
+\setcounter{savedintroduction}{0}
+\setcounter{namea}{0}
+\setcounter{savednamea}{0}
+\setcounter{nameb}{0}
+\setcounter{savednameb}{0}
+\setcounter{namec}{0}
+\setcounter{savednamec}{0}
+\setcounter{translator}{0}
+\setcounter{savedtranslator}{0}
+\setcounter{shortauthor}{0}
+\setcounter{savedshortauthor}{0}
+\setcounter{shorteditor}{0}
+\setcounter{savedshorteditor}{0}
+\setcounter{labelname}{0}
+\setcounter{savedlabelname}{0}
+\setcounter{institution}{0}
+\setcounter{savedinstitution}{0}
+\setcounter{lista}{0}
+\setcounter{savedlista}{0}
+\setcounter{listb}{0}
+\setcounter{savedlistb}{0}
+\setcounter{listc}{0}
+\setcounter{savedlistc}{0}
+\setcounter{listd}{0}
+\setcounter{savedlistd}{0}
+\setcounter{liste}{0}
+\setcounter{savedliste}{0}
+\setcounter{listf}{0}
+\setcounter{savedlistf}{0}
+\setcounter{location}{0}
+\setcounter{savedlocation}{0}
+\setcounter{organization}{0}
+\setcounter{savedorganization}{0}
+\setcounter{origlocation}{0}
+\setcounter{savedoriglocation}{0}
+\setcounter{origpublisher}{0}
+\setcounter{savedorigpublisher}{0}
+\setcounter{publisher}{0}
+\setcounter{savedpublisher}{0}
+\setcounter{language}{0}
+\setcounter{savedlanguage}{0}
+\setcounter{origlanguage}{0}
+\setcounter{savedoriglanguage}{0}
+\setcounter{pageref}{0}
+\setcounter{savedpageref}{0}
+\setcounter{textcitecount}{0}
+\setcounter{textcitetotal}{0}
+\setcounter{textcitemaxnames}{0}
+\setcounter{biburlbigbreakpenalty}{100}
+\setcounter{biburlbreakpenalty}{200}
+\setcounter{biburlnumpenalty}{0}
+\setcounter{biburlucpenalty}{0}
+\setcounter{biburllcpenalty}{0}
+\setcounter{smartand}{1}
+\setcounter{bbx:relatedcount}{0}
+\setcounter{bbx:relatedtotal}{0}
+\setcounter{parentequation}{0}
+\setcounter{LT@tables}{0}
+\setcounter{LT@chunks}{0}
+\setcounter{AlgoLine}{8}
+\setcounter{algocfline}{3}
+\setcounter{algocfproc}{3}
+\setcounter{algocf}{3}
+\setcounter{lstnumber}{1}
+\setcounter{FancyVerbLine}{0}
+\setcounter{section@level}{0}
+\setcounter{Item}{3}
+\setcounter{Hfootnote}{0}
+\setcounter{bookmark@seq@number}{0}
+\setcounter{caption@flags}{2}
+\setcounter{continuedfloat}{0}
+\setcounter{subfigure}{0}
+\setcounter{subtable}{0}
+\setcounter{theorem}{0}
+\setcounter{definition}{0}
+\setcounter{comment}{0}
+\setcounter{lstlisting}{0}
+}

@@ -30,6 +30,28 @@
 \tikzstyle{every picture}+=[remember picture]
 \tikzstyle{na} = [baseline=-.5ex]
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ % Numeracja i spis treści
+ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ % Podpodrozdziały muszą być numerowane, w przeciwnym razie \ref do nich
+ % zwraca numer ostatniego numerowanego licznika (błędne odsyłacze).
+\setcounter{secnumdepth}{3}
+ % ...ale spis treści zostaje na poziomie podrozdziałów.
+\setcounter{tocdepth}{2}
+ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ % Rozmieszczanie obiektów pływających (rysunki, tabele)
+ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+ % Domyślne parametry LaTeX-a są bardzo restrykcyjne i powodują, że duże
+ % rysunki są wypychane na osobne strony, pozostawiając dużo wolnego miejsca.
+\renewcommand{\topfraction}{0.9}       % ile strony u góry mogą zająć rysunki
+\renewcommand{\bottomfraction}{0.8}    % ile strony u dołu mogą zająć rysunki
+\renewcommand{\textfraction}{0.07}     % minimalna część strony na tekst
+\renewcommand{\floatpagefraction}{0.8} % minimalne wypełnienie strony rysunkowej
+\renewcommand{\dbltopfraction}{0.9}
+\renewcommand{\dblfloatpagefraction}{0.8}
+\setcounter{topnumber}{3}
+\setcounter{bottomnumber}{2}
+\setcounter{totalnumber}{4}
+ %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
  % Ładowanie danych bibliograficznych
  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \addbibresource{bibliography.bib}

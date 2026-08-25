@@ -3,8 +3,8 @@
   ax/.style={-{Latex[length=2.2mm]}, thick},
 ]
 % --- ambient axes -----------------------------------------------------------
-\draw[ax, black!55] (-0.6,-1.7) -- (3.6,-1.7) node[right, font=\scriptsize]{world $x$};
-\draw[ax, black!55] (-0.6,-1.7) -- (-0.6,1.9) node[above, font=\scriptsize]{world $y$};
+\draw[ax, black!55] (-0.6,-1.9) -- (3.6,-1.9) node[below left, font=\scriptsize]{world $x$};
+\draw[ax, black!55] (-0.6,-1.9) -- (-0.6,1.9) node[above, font=\scriptsize]{world $y$};
 
 % --- the gaussian as a shaded, rotated ellipse ------------------------------
 \begin{scope}[shift={(1.7,0.1)}, rotate=28]
@@ -13,8 +13,12 @@
   }
   \draw[blue!60!black, thick] (0,0) ellipse (1.5 and 0.85);
   % principal axes
-  \draw[ax, red!65!black]   (0,0) -- (1.5,0) node[pos=0.62, below, font=\scriptsize]{$\exp(s_{i,1})$};
-  \draw[ax, green!50!black] (0,0) -- (0,0.85) node[pos=0.7, left, font=\scriptsize]{$\exp(s_{i,2})$};
+  \draw[ax, red!65!black]   (0,0) -- (1.5,0)
+      node[pos=0.58, below, font=\scriptsize, fill=white, fill opacity=0.8,
+           text opacity=1, inner sep=1pt]{$\exp(s_{i,1})$};
+  \draw[ax, green!50!black] (0,0) -- (0,0.85)
+      node[pos=1.0, above left, font=\scriptsize, fill=white, fill opacity=0.8,
+           text opacity=1, inner sep=1pt]{$\exp(s_{i,2})$};
   \fill[black] (0,0) circle (1.4pt);
 \end{scope}
 
@@ -23,6 +27,6 @@
 \draw[-{Latex[length=1.6mm]}, black!60] (3.65,0.85) to[out=180,in=20] (1.78,0.18);
 \node[anchor=west, font=\footnotesize, blue!55!black] at (3.7,0.1) {opacity $\sigma_i$ (shading)};
 \node[anchor=west, font=\footnotesize] at (3.7,-0.65) {orientation $\mathbf{R}(\hat{\mathbf{q}}_i)$};
-\node[anchor=west, align=left, font=\footnotesize] at (3.7,-1.45)
+\node[anchor=west, align=left, font=\footnotesize] at (3.7,-1.4)
   {$\boldsymbol{\Sigma}_i=\mathbf{R}_i\mathbf{S}_i^2\mathbf{R}_i^{\!\top}$};
 \end{tikzpicture}

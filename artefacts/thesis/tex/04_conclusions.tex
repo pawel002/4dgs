@@ -23,7 +23,7 @@ Gaussian Splatting baseline from a single orbiting camera, supplemented by the f
 empty-room photographs that the fixed rig records for segmentation, and reaches a
 held-out quality of almost $40$\,dB, which confirms that the static half of the
 problem needed no new research. The foreground is observed by four fixed, calibrated cameras and
-is reconstructed by a custom temporal method built inside the nerfstudio framework.
+is reconstructed by a custom temporal method built inside the \emph{nerfstudio} framework.
 The method fits a dense cloud on the first frame and then tracks that one cloud
 through the remaining frames under two hard constraints. The number of primitives
 never changes, and the colour of every primitive stays frozen at its first-frame
@@ -66,7 +66,7 @@ of magnitude below the earlier baseline. A dedicated web renderer recombines the
 per-frame foreground with the static background and plays the result back smoothly,
 because switching frames costs only a visibility toggle rather than a data upload.
 
-The evaluation was designed to be honest about its own limits. All object-level
+The evaluation carries one built-in limit. All object-level
 fidelity numbers are bounded by an illumination gap that is a property of the
 ground truth rather than of the method, since hiding the room in the reference
 renders also removes the light the room bounces onto the subject. The structural
@@ -77,7 +77,7 @@ mode on demand and measuring the repair.
 \section{Possible Further Development}
 \label{sec:conclusions-future}
 
-The most consequential next step is the move from synthetic to real captures. The
+The main next step is the move from synthetic to real captures. The
 synthetic environment was chosen deliberately, because exact camera poses make the
 measured tracking error attributable to the method alone, and that property made
 the controlled experiments of Chapter~\ref{ch:research} possible. A real capture
@@ -92,6 +92,30 @@ subtraction should transfer to real footage with modest changes, since it alread
 handles soft shadows and indirect light, but sensor noise will demand a
 noise-adaptive threshold and the empty-room plate may need periodic refreshing
 under changing daylight.
+
+That step is a data problem before it is an algorithmic one, and this is the
+single sharpest limitation of the work. As
+Section~\ref{sec:results-dataset-scope} sets out, the method consumes a specific
+kind of recording, and the requirement that no existing capture happens to
+satisfy is that every static camera must see the scene \emph{without} the main
+subject at least once, so that a per-view empty-room plate exists. That plate is
+what makes the pipeline model-free: it produces the silhouettes, which in turn
+produce the visual-hull seed, the loss masks and the per-frame stray test, so
+the whole chain is downstream of it. Published multi-view dynamic-scene datasets
+begin recording with the performer already in the acting volume and therefore
+provide no such view, which is why the benchmark of this thesis had to be
+authored rather than borrowed, and why no measurement here is taken on real
+footage. Acquiring a suitable real dataset is thus a piece of work in its own
+right, and the protocol is straightforward to state, namely a rigidly mounted,
+hardware-synchronized rig of a few cameras with locked exposure and white
+balance, one calibration pass with a target, a short pass of the empty room
+recorded from every camera before anyone enters, and only then the performance.
+The alternative, consuming a conventional dynamic-capture dataset by replacing
+the plate with a learned matting or segmentation network, is a legitimate and
+probably necessary extension for reaching public benchmarks, but it should be
+recognized for what it is, a different method whose accuracy is partly the
+accuracy of a separately trained component, and it would need to be evaluated
+against the plate-based version on a capture that supports both.
 
 A second direction concerns the constant-topology assumption itself. Holding the
 primitive count fixed is what makes velocity, trajectories and temporal
@@ -149,10 +173,10 @@ A second family of applications follows from a property that image-based dynamic
 reconstruction methods usually lack. Because the primitive set is conserved, the
 reconstruction is simultaneously a dense set of point trajectories, and the thesis
 showed these trajectories to be coherent enough to read the subject's motion
-directly. This opens the door to quantitative motion analysis on top of an
-ordinary multi-camera recording. Gait analysis in rehabilitation, technique study
-in sport, and ergonomic assessment on a factory floor all need exactly this kind
-of dense, markerless trajectory field, and the fixed calibrated rig the method
+directly. This makes quantitative motion analysis possible on top of an ordinary
+multi-camera recording. Gait analysis in rehabilitation, technique study in
+sport, and ergonomic assessment on a factory floor all need this kind of dense,
+markerless trajectory field, and the fixed calibrated rig the method
 assumes is a realistic setup for all three environments.
 
 The static-dynamic decomposition also matches the structure of virtual production
@@ -171,8 +195,7 @@ shadow-aware hysteresis segmentation is a self-contained improvement to classica
 background subtraction and is usable wherever a static camera watches a scene with
 difficult, camouflaged foregrounds. The visual-hull seeding and the demonstration
 that random initialization fails under masked losses are relevant to any
-silhouette-supervised splatting pipeline. And the central lesson of the thesis,
-that holding topology and appearance fixed turns a hard inverse problem into a
-tractable tracking problem while simultaneously making the result compressible,
-is a design pattern for dynamic scene representation in general rather than a
-detail of this implementation.
+silhouette-supervised splatting pipeline. Holding topology and appearance fixed
+turns a hard inverse problem into a tractable tracking problem and at the same
+time makes the result compressible, which is a design choice available to dynamic
+scene representations in general rather than a detail of this implementation.

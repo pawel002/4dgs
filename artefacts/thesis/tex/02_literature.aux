@@ -1,0 +1,204 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\@writefile{toc}{\contentsline {chapter}{\numberline {2}Literature Review and Theoretical Foundations}{7}{chapter.2}\protected@file@percent }
+\@writefile{lof}{\addvspace {10\p@ }}
+\@writefile{lot}{\addvspace {10\p@ }}
+\@writefile{lol}{\addvspace {10\p@ }}
+\@writefile{loa}{\addvspace {10\p@ }}
+\newlabel{ch:literature}{{2}{7}{Literature Review and Theoretical Foundations}{chapter.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {2.1}Geometric Foundations of Structure from Motion}{7}{section.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1.1}Early Structure-from-Motion}{7}{subsection.2.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1.2}Scaling Up with Photo Tourism and Bundler}{8}{subsection.2.1.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2.1}{\ignorespaces Figure adapted from Snavely et al.~\blx@tocontentsinit {0}\cite {10.1145/1179352.1141964}, showing how Bundler transforms a set of photos into a sparse 3D point cloud, which can be navigated and explored in 3D rendering software.}}{8}{figure.caption.5}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:bundler}{{2.1}{8}{Figure adapted from Snavely et al.~\cite {10.1145/1179352.1141964}, showing how Bundler transforms a set of photos into a sparse 3D point cloud, which can be navigated and explored in 3D rendering software}{figure.caption.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1.3}COLMAP, the Current Reference Pipeline}{9}{subsection.2.1.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2.2}The Neural Shift Towards Implicit Representations}{9}{section.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2.1}Neural Radiance Fields (NeRF)}{9}{subsection.2.2.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2.2}{\ignorespaces Pipeline showing how 3D-R2N2~\blx@tocontentsinit {0}\cite {choy2016} transforms a set of images into a 3D voxel representation.}}{10}{figure.caption.6}\protected@file@percent }
+\newlabel{fig:3d-r2n2}{{2.2}{10}{Pipeline showing how 3D-R2N2~\cite {choy2016} transforms a set of images into a 3D voxel representation}{figure.caption.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2.2}Accelerating NeRF with Instant-NGP and Hybrid Representations}{10}{subsection.2.2.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2.3}{\ignorespaces NeRF~\blx@tocontentsinit {0}\cite {mildenhall2020} works by sampling a 5D space and then compositing those samples with the corresponding transparency coefficients.}}{11}{figure.caption.7}\protected@file@percent }
+\newlabel{fig:nerf}{{2.3}{11}{NeRF~\cite {mildenhall2020} works by sampling a 5D space and then compositing those samples with the corresponding transparency coefficients}{figure.caption.7}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {2.3}Explicit Radiance Fields and 3D Gaussian Splatting}{11}{section.2.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2.4}{\ignorespaces High-level visualization of how 3DGS takes sparse representation and refines it to better describe scene geometry. (\href  {https://pyimagesearch.com/2024/12/09/3d-gaussian-splatting-vs-nerf-the-end-game-of-3d-reconstruction/}{graphic source})}}{12}{figure.caption.8}\protected@file@percent }
+\newlabel{fig:gaussians-1}{{2.4}{12}{High-level visualization of how 3DGS takes sparse representation and refines it to better describe scene geometry. (\href {https://pyimagesearch.com/2024/12/09/3d-gaussian-splatting-vs-nerf-the-end-game-of-3d-reconstruction/}{graphic source})}{figure.caption.8}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2.5}{\ignorespaces Visualization of the entire 3DGS pipeline from the original paper~\blx@tocontentsinit {0}\cite {kerbl2023}. The method takes in SfM points and performs an iterative optimization loop in which Gaussians are rasterized and adjusted to match the training views.}}{12}{figure.caption.9}\protected@file@percent }
+\newlabel{fig:gaussians-2}{{2.5}{12}{Visualization of the entire 3DGS pipeline from the original paper~\cite {kerbl2023}. The method takes in SfM points and performs an iterative optimization loop in which Gaussians are rasterized and adjusted to match the training views}{figure.caption.9}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {2.4}Dynamic and Temporal Scene Representations}{13}{section.2.4}\protected@file@percent }
+\newlabel{sec:dynamic}{{2.4}{13}{Dynamic and Temporal Scene Representations}{section.2.4}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4.1}Dynamic NeRF Variants}{13}{subsection.2.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4.2}Dynamic Extensions of 3D Gaussian Splatting}{13}{subsection.2.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{\nonumberline Deformable 3D Gaussians.}{13}{paragraph*.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{\nonumberline 4D Gaussian Splatting.}{13}{paragraph*.11}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{\nonumberline SpaceTime Gaussians.}{13}{paragraph*.12}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{\nonumberline Dynamic 3D Gaussians.}{14}{paragraph*.13}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4.3}Positioning of the Proposed Method}{14}{subsection.2.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2.5}Theoretical Background}{14}{section.2.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.5.1}Sparse Reconstruction via COLMAP}{14}{subsection.2.5.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2.6}{\ignorespaces COLMAP's GUI after a successful point cloud reconstruction. Views and cameras are represented as 3D pyramids floating in space. In the middle a rough outline of an object reconstructed from a sparse collection of points is visible.}}{15}{figure.caption.14}\protected@file@percent }
+\newlabel{fig:colmap}{{2.6}{15}{COLMAP's GUI after a successful point cloud reconstruction. Views and cameras are represented as 3D pyramids floating in space. In the middle a rough outline of an object reconstructed from a sparse collection of points is visible}{figure.caption.14}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.5.2}3D Gaussian Splatting}{15}{subsection.2.5.2}\protected@file@percent }
+\newlabel{sec:notation}{{2.5.2}{15}{3D Gaussian Splatting}{subsection.2.5.2}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2.7}{\ignorespaces Anatomy of a single primitive (drawn as the 2D projection of the 3D ellipsoid). The mean $\boldsymbol  {\mu }_i$ locates it, the rotation $\mathbf  {R}(\hat  {\mathbf  {q}}_i)$ orients it, the exponentials of the log-scales set its axis lengths, and the opacity $\sigma _i$ controls how much it contributes, together scale and rotation form the covariance $\boldsymbol  {\Sigma }_i$ of Eq.~\eqref  {eq:cov}.}}{16}{figure.caption.15}\protected@file@percent }
+\newlabel{fig:gaussian}{{2.7}{16}{Anatomy of a single primitive (drawn as the 2D projection of the 3D ellipsoid). The mean $\boldsymbol {\mu }_i$ locates it, the rotation $\mathbf {R}(\hat {\mathbf {q}}_i)$ orients it, the exponentials of the log-scales set its axis lengths, and the opacity $\sigma _i$ controls how much it contributes, together scale and rotation form the covariance $\boldsymbol {\Sigma }_i$ of Eq.~\eqref {eq:cov}}{figure.caption.15}{}}
+\newlabel{eq:cov}{{2.9}{16}{3D Gaussian Splatting}{equation.2.9}{}}
+\newlabel{eq:sh2rgb}{{2.10}{17}{3D Gaussian Splatting}{equation.2.10}{}}
+\newlabel{eq:alphablend}{{2.13}{17}{3D Gaussian Splatting}{equation.2.13}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {2.5.2.1}Adaptive Density Control}{17}{subsubsection.2.5.2.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2.8}{\ignorespaces Visualizations from the original paper~\blx@tocontentsinit {0}\cite {kerbl2023} of how 3DGS solves the problem of under-reconstruction and over-reconstruction.}}{18}{figure.caption.16}\protected@file@percent }
+\newlabel{fig:gaussian3}{{2.8}{18}{Visualizations from the original paper~\cite {kerbl2023} of how 3DGS solves the problem of under-reconstruction and over-reconstruction}{figure.caption.16}{}}
+\@setckpt{tex/02_literature}{
+\setcounter{page}{20}
+\setcounter{equation}{13}
+\setcounter{enumi}{0}
+\setcounter{enumii}{0}
+\setcounter{enumiii}{0}
+\setcounter{enumiv}{0}
+\setcounter{footnote}{0}
+\setcounter{mpfootnote}{0}
+\setcounter{part}{0}
+\setcounter{chapter}{2}
+\setcounter{section}{5}
+\setcounter{subsection}{2}
+\setcounter{subsubsection}{1}
+\setcounter{paragraph}{0}
+\setcounter{subparagraph}{0}
+\setcounter{figure}{8}
+\setcounter{table}{0}
+\setcounter{tabx@nest}{0}
+\setcounter{listtotal}{0}
+\setcounter{listcount}{0}
+\setcounter{liststart}{0}
+\setcounter{liststop}{0}
+\setcounter{citecount}{0}
+\setcounter{citetotal}{0}
+\setcounter{multicitecount}{0}
+\setcounter{multicitetotal}{0}
+\setcounter{instcount}{31}
+\setcounter{maxnames}{3}
+\setcounter{minnames}{1}
+\setcounter{maxitems}{3}
+\setcounter{minitems}{1}
+\setcounter{citecounter}{0}
+\setcounter{maxcitecounter}{0}
+\setcounter{savedcitecounter}{0}
+\setcounter{uniquelist}{0}
+\setcounter{uniquename}{0}
+\setcounter{refsection}{0}
+\setcounter{refsegment}{0}
+\setcounter{maxextratitle}{0}
+\setcounter{maxextratitleyear}{0}
+\setcounter{maxextraname}{0}
+\setcounter{maxextradate}{0}
+\setcounter{maxextraalpha}{0}
+\setcounter{abbrvpenalty}{50}
+\setcounter{highnamepenalty}{50}
+\setcounter{lownamepenalty}{25}
+\setcounter{maxparens}{3}
+\setcounter{parenlevel}{0}
+\setcounter{blx@maxsection}{0}
+\setcounter{mincomprange}{10}
+\setcounter{maxcomprange}{100000}
+\setcounter{mincompwidth}{1}
+\setcounter{afterword}{0}
+\setcounter{savedafterword}{0}
+\setcounter{annotator}{0}
+\setcounter{savedannotator}{0}
+\setcounter{author}{0}
+\setcounter{savedauthor}{0}
+\setcounter{bookauthor}{0}
+\setcounter{savedbookauthor}{0}
+\setcounter{commentator}{0}
+\setcounter{savedcommentator}{0}
+\setcounter{editor}{0}
+\setcounter{savededitor}{0}
+\setcounter{editora}{0}
+\setcounter{savededitora}{0}
+\setcounter{editorb}{0}
+\setcounter{savededitorb}{0}
+\setcounter{editorc}{0}
+\setcounter{savededitorc}{0}
+\setcounter{foreword}{0}
+\setcounter{savedforeword}{0}
+\setcounter{holder}{0}
+\setcounter{savedholder}{0}
+\setcounter{introduction}{0}
+\setcounter{savedintroduction}{0}
+\setcounter{namea}{0}
+\setcounter{savednamea}{0}
+\setcounter{nameb}{0}
+\setcounter{savednameb}{0}
+\setcounter{namec}{0}
+\setcounter{savednamec}{0}
+\setcounter{translator}{0}
+\setcounter{savedtranslator}{0}
+\setcounter{shortauthor}{0}
+\setcounter{savedshortauthor}{0}
+\setcounter{shorteditor}{0}
+\setcounter{savedshorteditor}{0}
+\setcounter{labelname}{0}
+\setcounter{savedlabelname}{0}
+\setcounter{institution}{0}
+\setcounter{savedinstitution}{0}
+\setcounter{lista}{0}
+\setcounter{savedlista}{0}
+\setcounter{listb}{0}
+\setcounter{savedlistb}{0}
+\setcounter{listc}{0}
+\setcounter{savedlistc}{0}
+\setcounter{listd}{0}
+\setcounter{savedlistd}{0}
+\setcounter{liste}{0}
+\setcounter{savedliste}{0}
+\setcounter{listf}{0}
+\setcounter{savedlistf}{0}
+\setcounter{location}{0}
+\setcounter{savedlocation}{0}
+\setcounter{organization}{0}
+\setcounter{savedorganization}{0}
+\setcounter{origlocation}{0}
+\setcounter{savedoriglocation}{0}
+\setcounter{origpublisher}{0}
+\setcounter{savedorigpublisher}{0}
+\setcounter{publisher}{0}
+\setcounter{savedpublisher}{0}
+\setcounter{language}{0}
+\setcounter{savedlanguage}{0}
+\setcounter{origlanguage}{0}
+\setcounter{savedoriglanguage}{0}
+\setcounter{pageref}{0}
+\setcounter{savedpageref}{0}
+\setcounter{textcitecount}{0}
+\setcounter{textcitetotal}{0}
+\setcounter{textcitemaxnames}{0}
+\setcounter{biburlbigbreakpenalty}{100}
+\setcounter{biburlbreakpenalty}{200}
+\setcounter{biburlnumpenalty}{0}
+\setcounter{biburlucpenalty}{0}
+\setcounter{biburllcpenalty}{0}
+\setcounter{smartand}{1}
+\setcounter{bbx:relatedcount}{0}
+\setcounter{bbx:relatedtotal}{0}
+\setcounter{parentequation}{0}
+\setcounter{LT@tables}{0}
+\setcounter{LT@chunks}{0}
+\setcounter{AlgoLine}{0}
+\setcounter{algocfline}{0}
+\setcounter{algocfproc}{0}
+\setcounter{algocf}{0}
+\setcounter{lstnumber}{1}
+\setcounter{FancyVerbLine}{0}
+\setcounter{section@level}{0}
+\setcounter{Item}{0}
+\setcounter{Hfootnote}{0}
+\setcounter{bookmark@seq@number}{0}
+\setcounter{caption@flags}{2}
+\setcounter{continuedfloat}{0}
+\setcounter{subfigure}{0}
+\setcounter{subtable}{0}
+\setcounter{theorem}{0}
+\setcounter{definition}{0}
+\setcounter{comment}{0}
+\setcounter{lstlisting}{0}
+}
